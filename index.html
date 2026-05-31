@@ -65,9 +65,9 @@
     const CENTER  = new THREE.Vector3(0, 1.30, -1.70);
     const R       = 0.42;    // closure radius
     const CLOSURE_COUNT = 40000;
-    const FIELD_COUNT   = 24000;
+    const FIELD_COUNT   = 30000;
     const FIELD_IN  = 0.62;  // field starts just outside the body
-    const FIELD_OUT = 2.20;  // field extent
+    const FIELD_OUT = 2.55;  // field extent (the ocean)
     const TUBE   = 0.05;
     const PERIOD = 24.0;     // autonomous cycle seconds
     const FEED_RATE = 0.42;  // how fast a held trigger grows the body (lower = slower)
@@ -81,7 +81,7 @@
     document.body.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x07080f, 0.085);
+    scene.fog = new THREE.FogExp2(0x07080f, 0.07);
 
     const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.02, 100);
     let orbitR = 2.8, orbitYaw = 0.0, orbitPitch = 0.12;
@@ -123,21 +123,21 @@
 
     const cU = {
       uForm:{value:0}, uwEight:{value:0}, uwBall:{value:0}, uTwistZ:{value:0},
-      uWave:{value:0}, uSpinMat:{value:new THREE.Matrix3()},
+      uWave:{value:0}, uSpinMat:{value:new THREE.Matrix3()}, uEightHi:{value:0},
       uR:{value:R}, uCenter:{value:CENTER.clone()}, uSize:{value:12.0},
-      uHeld:{value:new THREE.Color('#e0ad52')}, uDissolved:{value:new THREE.Color('#3f74c4')},
+      uHeld:{value:new THREE.Color('#ecb74e')}, uDissolved:{value:new THREE.Color('#2e74ad')},
     };
     const cMat = new THREE.ShaderMaterial({
       uniforms:cU, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
       vertexShader:[
         'attribute float aPhase; attribute vec3 aTube; attribute float aSeed;',
-        'uniform float uForm,uwEight,uwBall,uTwistZ,uWave,uR,uSize;',
+        'uniform float uForm,uwEight,uwBall,uTwistZ,uWave,uR,uSize,uEightHi;',
         'uniform mat3 uSpinMat; uniform vec3 uCenter;',
-        'varying float vForm; varying float vLat; varying float vWave;',
+        'varying float vForm; varying float vLat; varying float vWave; varying float vEight;',
         'void main(){',
         '  float t=aPhase;',
         '  vec3 ring  = vec3(cos(t), sin(t), 0.0)*uR;',
-        '  vec3 eight = vec3(cos(t), sin(2.0*t), 0.0)*uR;',
+        '  vec3 eight = vec3(cos(t), sin(2.0*t), 0.0)*uR*1.12;',
         '  eight.z += uTwistZ*sin(t)*uR;',
         '  vec3 shape = mix(ring, eight, uwEight);',
         '  shape.z += 0.04*uR*sin(2.0*t - uWave)*uwEight*(1.0-uwBall);',
@@ -152,19 +152,21 @@
         '  vForm=uForm; vWave=0.5+0.5*sin(t-uWave);',
         '  vec4 mv = modelViewMatrix*vec4(world,1.0);',
         '  gl_Position=projectionMatrix*mv;',
-        '  gl_PointSize=uSize*mix(0.5,1.2,uForm)*(1.0/-mv.z);',
+        '  vEight=uEightHi;',
+        '  gl_PointSize=uSize*mix(0.5,1.2,uForm)*(1.0+0.55*uEightHi)*(1.0/-mv.z);',
         '}'
       ].join('\n'),
       fragmentShader:[
         'precision mediump float; uniform vec3 uHeld,uDissolved;',
-        'varying float vForm; varying float vLat; varying float vWave;',
+        'varying float vForm; varying float vLat; varying float vWave; varying float vEight;',
         'void main(){',
         '  vec2 d=gl_PointCoord-vec2(0.5); float r=length(d); if(r>0.5) discard;',
         '  float a=smoothstep(0.5,0.0,r);',
         '  vec3 col=mix(uDissolved,uHeld,vForm);',
         '  float bands=0.78+0.22*cos(vLat*8.0);',
         '  float wave=0.82+0.34*vWave;',
-        '  gl_FragColor=vec4(col*bands*wave, a*(0.45+0.5*vForm));',
+        '  float eightHi=1.0+0.45*vEight;',
+        '  gl_FragColor=vec4(col*bands*wave*eightHi, a*(0.45+0.5*vForm+0.25*vEight));',
         '}'
       ].join('\n')
     });
@@ -185,7 +187,7 @@
     fGeo.setAttribute('aSeed', new THREE.BufferAttribute(fSeed,1));
     const fU = {
       uWarp:{value:0}, uSpinMat:{value:new THREE.Matrix3()}, uCenter:{value:CENTER.clone()},
-      uTime:{value:0}, uSize:{value:7.0}, uColor:{value:new THREE.Color('#3a5f8c')},
+      uTime:{value:0}, uSize:{value:7.0}, uColor:{value:new THREE.Color('#2e74ad')},
     };
     const fMat = new THREE.ShaderMaterial({
       uniforms:fU, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
@@ -201,7 +203,8 @@
         '  vec3 pos = dir*nr;',
         '  float swirl = uWarp*0.45*(sc/(r+sc));',                  // frame-drag from the spin
         '  pos = mix(pos, uSpinMat*pos, swirl);',
-        '  pos += 0.012*sin(uTime*0.6 + aSeed*6.2831);',           // faint live shimmer
+        '  pos += 0.012*sin(uTime*0.6 + aSeed*6.2831);',           // faint shimmer
+        '  pos.y += 0.030*sin(rest.x*1.4 + uTime*0.45) + 0.028*sin(rest.z*1.2 + uTime*0.38);', // ocean swell
         '  vec3 world = uCenter + pos;',
         '  vB = 0.30 + 0.55*uWarp*(sc/(r+sc));',                   // brighter where curved hardest
         '  vec4 mv = modelViewMatrix*vec4(world,1.0);',
@@ -214,7 +217,7 @@
         'void main(){',
         '  vec2 d=gl_PointCoord-vec2(0.5); float r=length(d); if(r>0.5) discard;',
         '  float a=smoothstep(0.5,0.0,r);',
-        '  gl_FragColor=vec4(uColor*(0.5+vB), a*(0.16+0.30*vB));',
+        '  gl_FragColor=vec4(uColor*(0.55+vB), a*(0.20+0.32*vB));',
         '}'
       ].join('\n')
     });
@@ -317,20 +320,21 @@
 
       M=form*1.9-0.95; if(form>0.95) M+=0.06*Math.sin(t*1.6);
 
-      const wEight=smoothstep(0.25,0.50,form);
-      const wBall =smoothstep(0.72,1.00,form);
-      const twistZ=0.38*smoothstep(0.25,0.55,form);
+      const wEight=smoothstep(0.22,0.46,form);
+      const wBall =smoothstep(0.82,1.00,form);
+      const twistZ=0.62*smoothstep(0.25,0.55,form);
       const warp  =smoothstep(0.12,1.0,form);
 
-      const waveSpeed=lerp(0.0,2.4,smoothstep(0.40,0.85,form));
-      const spinSpeed=lerp(0.0,1.15,smoothstep(0.45,0.90,form));
+      const waveSpeed=lerp(0.0,2.4,smoothstep(0.45,0.75,form));
+      const spinSpeed=lerp(0.0,1.15,smoothstep(0.80,0.98,form));
       wave+=waveSpeed*dt; spin+=spinSpeed*dt;
       sm4.makeRotationAxis(spinAxis,spin); sm3.setFromMatrix4(sm4);
 
       cU.uForm.value=form; cU.uwEight.value=wEight; cU.uwBall.value=wBall;
       cU.uTwistZ.value=twistZ; cU.uWave.value=wave; cU.uSpinMat.value.copy(sm3);
+      cU.uEightHi.value=wEight*(1.0-wBall);
       fU.uWarp.value=warp; fU.uSpinMat.value.copy(sm3); fU.uTime.value=t;
-      coreMat.opacity=0.04+0.22*form;
+      coreMat.opacity=0.05+0.26*form;
 
       const lab=phaseLabel(form,feed>0.2,collapsing);
       hudM.textContent=(M>=0?'+':'')+M.toFixed(2); hudM.style.color=M>=0?'#d4a049':'#4a90d4';
