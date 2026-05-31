@@ -152,8 +152,12 @@
       const core=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture(),color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
       core.scale.set(R*3.4,R*3.4,1); core.visible=false; scene.add(core);
       pool.push({pts:p, u:m.uniforms, core:core, center:new THREE.Vector3(), form:0, wave:Math.random()*10, spin:Math.random()*10,
-        held:false, owner:null, dissolving:false, grabbedBy:null, grabDist:1.5, graceTimer:0, free:true}); }
+        held:false, owner:null, dissolving:false, grabbedBy:null, grabDist:1.5, graceTimer:0, mass:0.10, vel:new THREE.Vector3(), radius:R, free:true}); }
     function getFree(){ for(const b of pool) if(b.free) return b; return null; }
+
+    const BONDS=15; const bondPool=[];
+    for(let i=0;i<BONDS;i++){ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+      const ln=new THREE.Line(g,new THREE.LineBasicMaterial({color:0x6fb0e0,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false})); ln.frustumCulled=false; ln.visible=false; scene.add(ln); bondPool.push(ln); }
 
     const spinAxis=new THREE.Vector3(0.16,1.0,0.10).normalize();
     const sm4=new THREE.Matrix4(), sm3=new THREE.Matrix3();
@@ -163,7 +167,7 @@
     function intersectSea(o,d,out){ if(Math.abs(d.y)<1e-4){ out.set(o.x,SURFACE_Y,o.z); return; } let tt=(SURFACE_Y-o.y)/d.y; if(tt<0) tt=30.0;
       out.set(o.x+d.x*tt,SURFACE_Y,o.z+d.z*tt); const rad=Math.hypot(out.x,out.z); if(rad>OCEAN_R*0.9){ const s=OCEAN_R*0.9/rad; out.x*=s; out.z*=s; } }
 
-    function spawnBody(ref,spot){ const b=getFree(); if(!b) return null; b.free=false; b.center.copy(spot); b.form=0; b.held=false; b.owner=ref; b.dissolving=false; b.grabbedBy=null; b.graceTimer=0; b.pts.visible=true; b.core.visible=true; return b; }
+    function spawnBody(ref,spot){ const b=getFree(); if(!b) return null; b.free=false; b.center.copy(spot); b.form=0; b.held=false; b.owner=ref; b.dissolving=false; b.grabbedBy=null; b.graceTimer=0; b.mass=0.10; b.vel.set(0,0,0); b.radius=R; b.pts.visible=true; b.core.visible=true; return b; }
     function commitBody(b){ b.held=true; b.owner=null; b.graceTimer=0; }
     function toPending(b){ if(b && !b.held){ b.owner=null; b.graceTimer=GRACE; } }
     function releaseFeed(b){ if(b && !b.held){ b.dissolving=true; b.owner=null; } }
@@ -229,6 +233,38 @@
     });
 
     // ---- loop ----
+    function interactBodies(dt){
+      const H=[]; for(const b of pool) if(!b.free && b.held) H.push(b);
+      for(let i=0;i<H.length;i++){ for(let j=i+1;j<H.length;j++){ const a=H[i], b=H[j];
+        const dx=b.center.x-a.center.x, dy=b.center.y-a.center.y, dz=b.center.z-a.center.z; const d=Math.hypot(dx,dy,dz)+1e-4;
+        const d0=(a.radius+b.radius)*1.7, cutoff=d0*3.2; if(d>cutoff) continue;
+        const nx=dx/d, ny=dy/d, nz=dz/d; let f=2.4*(d-d0); f=Math.max(-6,Math.min(6,f));   // settle to d0
+        if(!a.grabbedBy){ a.vel.x+=nx*f*dt; a.vel.y+=ny*f*dt; a.vel.z+=nz*f*dt; }
+        if(!b.grabbedBy){ b.vel.x-=nx*f*dt; b.vel.y-=ny*f*dt; b.vel.z-=nz*f*dt; }
+        if(!a.grabbedBy && !b.grabbedBy){ const prox=smoothstep(cutoff,d0,d); const dm=0.6*(a.mass-b.mass)*prox*dt; a.mass-=dm; b.mass+=dm; } // gradient reaction: equalize
+      }}
+      for(const b of H){ if(b.grabbedBy){ b.vel.set(0,0,0); }
+        else { b.center.x+=b.vel.x*dt; b.center.y+=b.vel.y*dt; b.center.z+=b.vel.z*dt;
+          b.vel.multiplyScalar(0.90); const sp=b.vel.length(); if(sp>3.0) b.vel.multiplyScalar(3.0/sp);
+          b.center.y=Math.max(b.radius*1.1, b.center.y); }
+        b.radius=R*(0.42+1.25*Math.cbrt(Math.max(0.04,b.mass))); }
+    }
+    function drawBonds(t){
+      const H=[]; for(const b of pool) if(!b.free && b.held) H.push(b);
+      const n=H.length; const within=[]; for(let i=0;i<n;i++) within[i]=[];
+      const edges=[];
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ const a=H[i],b=H[j]; const d=a.center.distanceTo(b.center);
+        const d0=(a.radius+b.radius)*1.7, cutoff=d0*3.2; if(d<cutoff){ within[i][j]=within[j][i]=true; edges.push({a,b,i,j,prox:smoothstep(cutoff,d0,d)}); } }
+      const ring={};
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) for(let k=j+1;k<n;k++){ if(within[i][j]&&within[j][k]&&within[i][k]){ ring[i+'_'+j]=ring[j+'_'+k]=ring[i+'_'+k]=true; } }
+      let bi=0;
+      for(const e of edges){ if(bi>=BONDS) break; const ln=bondPool[bi++]; const ar=ln.geometry.attributes.position.array;
+        ar[0]=e.a.center.x;ar[1]=e.a.center.y;ar[2]=e.a.center.z; ar[3]=e.b.center.x;ar[4]=e.b.center.y;ar[5]=e.b.center.z; ln.geometry.attributes.position.needsUpdate=true;
+        const isRing=ring[e.i+'_'+e.j]; const bal=1.0-Math.min(1,Math.abs(e.a.mass-e.b.mass)/0.6);
+        ln.material.color.setHex(isRing?0xe8c46a:(bal>0.7?0xb9d18a:0x6fb0e0));
+        ln.material.opacity=(isRing?0.75:0.42)*e.prox*(0.7+0.3*Math.sin(t*4.0)); ln.visible=true; }
+      for(;bi<BONDS;bi++) bondPool[bi].visible=false;
+    }
     const clock=new THREE.Clock();
     function tick(){
       const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime; desktopMove(dt); oU.uTime.value=t;
@@ -246,9 +282,10 @@
         }
       }
 
+      interactBodies(dt);
       let heldCount=0, activeForm=0, activeM=-0.95;
       for(const b of pool){ if(b.free) continue;
-        if(b.owner) b.form+=(1.0-b.form)*dt*FEED_RATE;
+        if(b.owner){ b.form+=(1.0-b.form)*dt*FEED_RATE; b.mass=Math.min(2.0, b.mass+0.10*dt); }
         else if(b.held) b.form+=(1.0-b.form)*dt*1.5;
         else if(b.graceTimer>0){ b.form+=(1.0-b.form)*dt*1.2; b.graceTimer-=dt; if(b.graceTimer<=0) b.dissolving=true; }
         else if(b.dissolving){ b.form+=(0.0-b.form)*dt*RELEASE_RATE; if(b.form<0.02){ b.free=true; b.pts.visible=false; b.core.visible=false; continue; } }
@@ -257,8 +294,8 @@
         const wEight=smoothstep(0.22,0.46,b.form), wBall=smoothstep(0.82,1.0,b.form), twistZ=0.62*smoothstep(0.25,0.55,b.form);
         b.wave+=lerp(0,2.4,smoothstep(0.45,0.75,b.form))*dt; b.spin+=lerp(0,1.15,smoothstep(0.80,0.98,b.form))*dt;
         sm4.makeRotationAxis(spinAxis,b.spin); sm3.setFromMatrix4(sm4);
-        const u=b.u; u.uForm.value=b.form; u.uwEight.value=wEight; u.uwBall.value=wBall; u.uTwistZ.value=twistZ; u.uEightHi.value=wEight*(1.0-wBall); u.uWave.value=b.wave; u.uSpinMat.value.copy(sm3); u.uCenter.value.copy(b.center);
-        b.core.position.set(b.center.x,b.center.y+R*1.15*b.form,b.center.z); b.core.material.opacity=0.04+0.14*b.form; b.core.visible=b.form>0.02;
+        const u=b.u; u.uForm.value=b.form; u.uwEight.value=wEight; u.uwBall.value=wBall; u.uTwistZ.value=twistZ; u.uEightHi.value=wEight*(1.0-wBall); u.uWave.value=b.wave; u.uSpinMat.value.copy(sm3); u.uCenter.value.copy(b.center); u.uR.value=b.radius;
+        b.core.scale.set(b.radius*3.4,b.radius*3.4,1); b.core.position.set(b.center.x,b.center.y+b.radius*1.15*b.form,b.center.z); b.core.material.opacity=0.04+0.14*b.form; b.core.visible=b.form>0.02;
         if(b.held) heldCount++;
         if(b.owner && b.form>activeForm){ activeForm=b.form; activeM=b.form*1.9-0.95; }
       }
@@ -292,6 +329,7 @@
       camera.getWorldPosition(_o); camera.getWorldDirection(_d); hudSprite.position.set(_o.x+_d.x*1.6, _o.y+_d.y*1.6-0.45, _o.z+_d.z*1.6);
       hudSprite.material.opacity=renderer.xr.isPresenting?0.5:0.0;
 
+      drawBonds(t);
       renderer.render(scene,camera);
     }
     renderer.setAnimationLoop(tick);
