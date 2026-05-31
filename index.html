@@ -265,6 +265,7 @@
     // ---- reticles ----
     const reticles=[];
     for(let i=0;i<2;i++){ const rt=new THREE.Sprite(new THREE.SpriteMaterial({map:ringTexture(),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:0.5})); rt.scale.set(0.5,0.5,1); rt.visible=false; scene.add(rt); reticles.push(rt); }
+    const nobleHalo=new THREE.Sprite(new THREE.SpriteMaterial({map:ringTexture(),color:0x9fe8ff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false})); nobleHalo.visible=false; scene.add(nobleHalo);
 
     // ---- VR hud ----
     const hudCanvas=document.createElement('canvas'); hudCanvas.width=512; hudCanvas.height=140; const hctx=hudCanvas.getContext('2d');
