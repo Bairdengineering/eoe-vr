@@ -599,11 +599,11 @@
 
     function setMode(m){ mode=m;
       const tbl=(m==='table'), mol=(m==='mol');
-      tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol;
+      tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol; if(mol) drawMolShelf();
       if(!tbl){ selZ=0; hoverZ=0; }
       if(!mol){ molSel=-1; molHover=-1; curMol=null; for(const a of matom){ a.active=false; a.pts.visible=false; } mbPts.visible=false; molInfo.visible=false; }
       if(tbl||mol){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
-        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=mol?3.0:2.7; orbFocus.copy(mol?molCenter:new THREE.Vector3(0,1.3,-1.95)); applyDesktopCam(); } }
+        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=mol?3.5:2.7; orbFocus.copy(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95)); applyDesktopCam(); } }
       else { if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); }
       const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol) && !renderer.xr.isPresenting); }
     if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; }
