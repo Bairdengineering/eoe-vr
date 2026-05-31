@@ -139,7 +139,7 @@
     renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(DPR); renderer.xr.enabled=true; renderer.setClearColor(0x05070d,1);
     document.body.appendChild(renderer.domElement);
     const scene=new THREE.Scene();
-    const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,0.02,220);
+    const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,0.02,340);
     const rig=new THREE.Group(); rig.add(camera); scene.add(rig);
     let dYaw=0,dPitch=-0.18,dPos=new THREE.Vector3(0,1.6,0);
     let orbitOn=false, orbYaw=0.0, orbPitch=0.16, orbDist=2.7; const orbFocus=new THREE.Vector3(0,1.3,-1.95);
@@ -188,6 +188,37 @@
       ].join('\n')
     });
     const ocean=new THREE.Points(oGeo,oMat); ocean.frustumCulled=false; scene.add(ocean);
+
+    // ================= COSMIC WEB (largest-scale closure overhead: same M=chi*s - lambda) =================
+    const cwGlows=[]; const cosmicWeb=new THREE.Group(); scene.add(cosmicWeb);
+    (function(){
+      const rnd=Math.random; const nodes=[]; const RMIN=92,RMAX=185;
+      const centers=[]; for(let i=0;i<11;i++){ const u=rnd()*2-1, th=rnd()*6.2832, r=RMIN+rnd()*(RMAX-RMIN), sx=Math.sqrt(Math.max(0,1-u*u));
+        centers.push(new THREE.Vector3(sx*Math.cos(th)*r, Math.abs(u*r)*0.85-8, sx*Math.sin(th)*r)); }
+      centers.forEach(function(c){ const k=7+(rnd()*9|0); for(let j=0;j<k;j++){ const p=c.clone().add(new THREE.Vector3((rnd()-0.5)*34,(rnd()-0.5)*30,(rnd()-0.5)*34));
+        if(p.y<-22) p.y=-22+rnd()*10; const q=rnd()<0.13; nodes.push({p:p,q:q,s:(q?1.7:0.7)+rnd()*0.9}); } });
+      for(let i=0;i<40;i++){ const u=rnd()*2-1, th=rnd()*6.2832, r=RMIN+rnd()*(RMAX-RMIN), sx=Math.sqrt(Math.max(0,1-u*u));
+        nodes.push({p:new THREE.Vector3(sx*Math.cos(th)*r, Math.abs(u*r)*0.8-6, sx*Math.sin(th)*r), q:rnd()<0.06, s:0.5+rnd()*0.7}); }
+      const N=nodes.length, np=new Float32Array(N*3), ac=new Float32Array(N*3), asz=new Float32Array(N);
+      for(let i=0;i<N;i++){ const nd=nodes[i]; np[i*3]=nd.p.x; np[i*3+1]=nd.p.y; np[i*3+2]=nd.p.z;
+        if(nd.q){ ac[i*3]=1.0; ac[i*3+1]=0.82; ac[i*3+2]=0.55; } else { const w=0.55+rnd()*0.3; ac[i*3]=0.6*w; ac[i*3+1]=0.72*w; ac[i*3+2]=1.0*w; } asz[i]=nd.s; }
+      const ng=new THREE.BufferGeometry(); ng.setAttribute('position',new THREE.BufferAttribute(np,3));
+      ng.setAttribute('acol',new THREE.BufferAttribute(ac,3)); ng.setAttribute('asz',new THREE.BufferAttribute(asz,1));
+      const nmat=new THREE.ShaderMaterial({ uniforms:{uTex:{value:radialTexture()},uDpr:{value:DPR}}, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+        vertexShader:'attribute float asz; attribute vec3 acol; uniform float uDpr; varying vec3 vC; void main(){ vC=acol; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=asz*760.0*uDpr/(-mv.z); gl_Position=projectionMatrix*mv; }',
+        fragmentShader:'uniform sampler2D uTex; varying vec3 vC; void main(){ vec4 t=texture2D(uTex,gl_PointCoord); gl_FragColor=vec4(vC,1.0)*t.a*0.72; }' });
+      const npts=new THREE.Points(ng,nmat); npts.frustumCulled=false; cosmicWeb.add(npts);
+      const segs=[], TH=42;
+      for(let i=0;i<N;i++){ let best=[]; for(let j=0;j<N;j++){ if(j===i) continue; const d=nodes[i].p.distanceTo(nodes[j].p); if(d<TH) best.push([d,j]); }
+        best.sort(function(a,b){return a[0]-b[0];}); best=best.slice(0,2); for(let b=0;b<best.length;b++){ const j=best[b][1]; if(j>i){ segs.push(nodes[i].p,nodes[j].p); } } }
+      if(segs.length){ const fg=new THREE.BufferGeometry().setFromPoints(segs);
+        const fil=new THREE.LineSegments(fg,new THREE.LineBasicMaterial({color:0x4a6ea8,transparent:true,opacity:0.085,depthWrite:false,blending:THREE.AdditiveBlending})); fil.frustumCulled=false; cosmicWeb.add(fil); }
+      const quas=nodes.filter(function(n){return n.q;}); quas.sort(function(a,b){return b.s-a.s;});
+      for(let i=0;i<Math.min(6,quas.length);i++){ const g=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture(),color:0xffd9a0,transparent:true,opacity:0.26,depthWrite:false,blending:THREE.AdditiveBlending}));
+        g.position.copy(quas[i].p); const sc=6+quas[i].s*3; g.scale.set(sc,sc,1); g.userData.tw=rnd()*9; g.userData.b=0.26; cosmicWeb.add(g); cwGlows.push(g); }
+      for(let i=0;i<2 && i<quas.length;i++){ const r=new THREE.Sprite(new THREE.SpriteMaterial({map:ringTexture(),color:0xffb066,transparent:true,opacity:0.3,depthWrite:false,blending:THREE.AdditiveBlending}));
+        r.position.copy(quas[i].p); const sc=7+i*2; r.scale.set(sc,sc,1); cosmicWeb.add(r); }
+    })();
 
     // ================= MATTER (shared geometry, pool of bodies) =================
     const cDisk=new Float32Array(PPB*3), cPhase=new Float32Array(PPB), cTube=new Float32Array(PPB*3), cSeed=new Float32Array(PPB);
@@ -677,6 +708,7 @@
     const clock=new THREE.Clock();
     function tick(){
       const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime; desktopMove(dt); oU.uTime.value=t;
+      if(cosmicWeb){ cosmicWeb.rotation.y+=dt*0.004; for(let i=0;i<cwGlows.length;i++){ const g=cwGlows[i]; g.material.opacity=g.userData.b*(0.7+0.3*Math.sin(t*0.6+g.userData.tw)); } }
 
       if(renderer.xr.isPresenting && xrSession){ const srcs=xrSession.inputSources;
         for(let i=0;i<srcs.length && i<controllers.length;i++){ const gp=srcs[i].gamepad; const c=controllers[i]; if(!gp||!c) continue;
