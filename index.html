@@ -217,19 +217,29 @@
         stars.push({x:sx*Math.cos(th)*r,y:y,z:sx*Math.sin(th)*r,c:[tint[0]*br,tint[1]*br,tint[2]*br],s:170+big*900}); }
       cosmicWeb.add(new THREE.Points(fillPoints(stars), ptShader(dotTex(false),1.0)));
 
-      // billowing nebula: warm where matter condenses, teal where substrate is still gas
-      const warm=[0.95,0.52,0.26], teal=[0.20,0.60,0.66], mag=[0.66,0.28,0.52]; const neb=[];
-      function cloud(cen, span, count, warmBias){ const subs=5+(rnd()*4|0);
+      // billowing nebula clouds (warm = matter condensing/held, teal = substrate still gas) + ambient washes
+      const warm=[1.0,0.55,0.24], teal=[0.24,0.70,0.78], mag=[0.72,0.30,0.58]; const neb=[];
+      function dirv(x,y,z,r){ return new THREE.Vector3(x,y,z).normalize().multiplyScalar(r); }
+      function cloud(cen, span, count, warmBias, boost){ const subs=5+(rnd()*4|0);
         const up=Math.abs(cen.y)<cen.length()*0.9?new THREE.Vector3(0,1,0):new THREE.Vector3(1,0,0);
         const tx=new THREE.Vector3().crossVectors(cen,up).normalize(); const ty=new THREE.Vector3().crossVectors(cen,tx).normalize();
         for(let sIdx=0;sIdx<subs;sIdx++){ const so=tx.clone().multiplyScalar((rnd()-0.5)*span).add(ty.clone().multiplyScalar((rnd()-0.5)*span)); const sc=cen.clone().add(so);
           const k=(count/subs)|0; for(let j=0;j<k;j++){ const pj=sc.clone().add(new THREE.Vector3((rnd()-0.5)*span*0.6,(rnd()-0.5)*span*0.6,(rnd()-0.5)*span*0.6));
-            const tt=clamp01((pj.y-(cen.y-span))/(2*span)); let col=mix3(warm,teal,clamp01(tt*0.9+(0.4-warmBias))); if(rnd()<0.06) col=mag;
-            const edge=so.length()/span; const br=(0.5-edge*0.3)*(0.5+rnd()*0.8); neb.push({x:pj.x,y:pj.y,z:pj.z,c:[col[0]*br,col[1]*br,col[2]*br],s:900+rnd()*2600}); } } }
-      cloud(new THREE.Vector3(-0.7,0.35,-0.6).normalize().multiplyScalar(155), 60, 900, 0.55);
-      cloud(new THREE.Vector3(0.8,0.25,0.2).normalize().multiplyScalar(165), 40, 360, 0.25);
-      cloud(new THREE.Vector3(0.1,0.6,0.9).normalize().multiplyScalar(160), 34, 240, 0.15);
-      cosmicWeb.add(new THREE.Points(fillPoints(neb), ptShader(dotTex(true),0.5)));
+            const tt=clamp01((pj.y-(cen.y-span))/(2*span)); let col=mix3(warm,teal,clamp01(tt*0.9+(0.4-warmBias))); if(rnd()<0.07) col=mag;
+            const edge=so.length()/span; const br=(0.62-edge*0.25)*(0.5+rnd()*0.8)*boost; neb.push({x:pj.x,y:pj.y,z:pj.z,c:[col[0]*br,col[1]*br,col[2]*br],s:1100+rnd()*3200}); } } }
+      cloud(dirv(-0.7,0.35,-0.6,150), 64, 1100, 0.6, 1.05);   // dominant warm wall
+      cloud(dirv( 0.85,0.2,0.1,160), 48, 520, 0.3, 0.95);
+      cloud(dirv( 0.1,0.55,0.95,155), 44, 460, 0.2, 0.9);
+      cloud(dirv(-0.2,0.3,0.95,150), 40, 380, 0.45, 0.9);
+      cloud(dirv( 0.5,0.45,-0.8,158), 46, 480, 0.25, 0.9);
+      cloud(dirv(-0.9,0.15,0.2,160), 42, 420, 0.55, 0.95);
+      cosmicWeb.add(new THREE.Points(fillPoints(neb), ptShader(dotTex(true),1.35)));
+      // ambient color washes — guarantee color in every direction
+      const washTex=dotTex(true);
+      const WASH=[[0x2f6f9a,210,0.17],[0xc06a2c,205,0.17],[0x6a2f7a,200,0.14],[0x1f7a70,195,0.15],[0x8a3a5a,185,0.13]];
+      for(let i=0;i<WASH.length;i++){ const an=i*1.25+0.3, el=(rnd()*0.7-0.1), cy=Math.sin(el), cxz=Math.cos(el);
+        const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:washTex,color:WASH[i][0],transparent:true,opacity:WASH[i][2],depthWrite:false,blending:THREE.AdditiveBlending}));
+        sp.position.set(Math.cos(an)*cxz*150, cy*120+20, Math.sin(an)*cxz*150); sp.scale.set(WASH[i][1],WASH[i][1],1); cosmicWeb.add(sp); }
 
       // bright JWST diffraction-spike stars
       const stex=spikeTex();
