@@ -192,32 +192,47 @@
     // ================= COSMIC WEB (largest-scale closure overhead: same M=chi*s - lambda) =================
     const cwGlows=[]; const cosmicWeb=new THREE.Group(); scene.add(cosmicWeb);
     (function(){
-      const rnd=Math.random; const nodes=[]; const RMIN=92,RMAX=185;
-      const centers=[]; for(let i=0;i<11;i++){ const u=rnd()*2-1, th=rnd()*6.2832, r=RMIN+rnd()*(RMAX-RMIN), sx=Math.sqrt(Math.max(0,1-u*u));
+      const rnd=Math.random; const nodes=[]; const RMIN=88,RMAX=190;
+      // galaxy palette: blue-white young, gold ellipticals, teal / violet / rose exotic + warm white
+      const PAL=[[0.62,0.74,1.0],[0.62,0.74,1.0],[0.62,0.74,1.0],[1.0,0.80,0.45],[1.0,0.80,0.45],[1.0,0.93,0.82],[0.45,0.90,0.82],[0.74,0.56,1.0],[1.0,0.62,0.72]];
+      function pal(){ return PAL[(rnd()*PAL.length)|0]; }
+      const centers=[]; for(let i=0;i<16;i++){ const u=rnd()*2-1, th=rnd()*6.2832, r=RMIN+rnd()*(RMAX-RMIN), sx=Math.sqrt(Math.max(0,1-u*u));
         centers.push(new THREE.Vector3(sx*Math.cos(th)*r, Math.abs(u*r)*0.85-8, sx*Math.sin(th)*r)); }
-      centers.forEach(function(c){ const k=7+(rnd()*9|0); for(let j=0;j<k;j++){ const p=c.clone().add(new THREE.Vector3((rnd()-0.5)*34,(rnd()-0.5)*30,(rnd()-0.5)*34));
-        if(p.y<-22) p.y=-22+rnd()*10; const q=rnd()<0.13; nodes.push({p:p,q:q,s:(q?1.7:0.7)+rnd()*0.9}); } });
-      for(let i=0;i<40;i++){ const u=rnd()*2-1, th=rnd()*6.2832, r=RMIN+rnd()*(RMAX-RMIN), sx=Math.sqrt(Math.max(0,1-u*u));
-        nodes.push({p:new THREE.Vector3(sx*Math.cos(th)*r, Math.abs(u*r)*0.8-6, sx*Math.sin(th)*r), q:rnd()<0.06, s:0.5+rnd()*0.7}); }
+      centers.forEach(function(c){ const k=9+(rnd()*11|0); const hue=pal(); for(let j=0;j<k;j++){ const p=c.clone().add(new THREE.Vector3((rnd()-0.5)*36,(rnd()-0.5)*32,(rnd()-0.5)*36));
+        if(p.y<-22) p.y=-22+rnd()*10; const q=rnd()<0.16; const useHue=rnd()<0.6?hue:pal(); const b=0.7+rnd()*0.5;
+        nodes.push({p:p,q:q,s:(q?2.0:0.85)+rnd()*1.0, c:q?[1.0,0.88,0.62]:[useHue[0]*b,useHue[1]*b,useHue[2]*b]}); } });
+      for(let i=0;i<70;i++){ const u=rnd()*2-1, th=rnd()*6.2832, r=RMIN+rnd()*(RMAX-RMIN), sx=Math.sqrt(Math.max(0,1-u*u)); const q=rnd()<0.08; const h=pal(); const b=0.6+rnd()*0.5;
+        nodes.push({p:new THREE.Vector3(sx*Math.cos(th)*r, Math.abs(u*r)*0.8-6, sx*Math.sin(th)*r), q:q, s:(q?1.8:0.6)+rnd()*0.8, c:q?[0.82,0.9,1.0]:[h[0]*b,h[1]*b,h[2]*b]}); }
       const N=nodes.length, np=new Float32Array(N*3), ac=new Float32Array(N*3), asz=new Float32Array(N);
-      for(let i=0;i<N;i++){ const nd=nodes[i]; np[i*3]=nd.p.x; np[i*3+1]=nd.p.y; np[i*3+2]=nd.p.z;
-        if(nd.q){ ac[i*3]=1.0; ac[i*3+1]=0.82; ac[i*3+2]=0.55; } else { const w=0.55+rnd()*0.3; ac[i*3]=0.6*w; ac[i*3+1]=0.72*w; ac[i*3+2]=1.0*w; } asz[i]=nd.s; }
+      for(let i=0;i<N;i++){ const nd=nodes[i]; np[i*3]=nd.p.x; np[i*3+1]=nd.p.y; np[i*3+2]=nd.p.z; ac[i*3]=nd.c[0]; ac[i*3+1]=nd.c[1]; ac[i*3+2]=nd.c[2]; asz[i]=nd.s; }
       const ng=new THREE.BufferGeometry(); ng.setAttribute('position',new THREE.BufferAttribute(np,3));
       ng.setAttribute('acol',new THREE.BufferAttribute(ac,3)); ng.setAttribute('asz',new THREE.BufferAttribute(asz,1));
       const nmat=new THREE.ShaderMaterial({ uniforms:{uTex:{value:radialTexture()},uDpr:{value:DPR}}, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
-        vertexShader:'attribute float asz; attribute vec3 acol; uniform float uDpr; varying vec3 vC; void main(){ vC=acol; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=asz*760.0*uDpr/(-mv.z); gl_Position=projectionMatrix*mv; }',
-        fragmentShader:'uniform sampler2D uTex; varying vec3 vC; void main(){ vec4 t=texture2D(uTex,gl_PointCoord); gl_FragColor=vec4(vC,1.0)*t.a*0.72; }' });
+        vertexShader:'attribute float asz; attribute vec3 acol; uniform float uDpr; varying vec3 vC; void main(){ vC=acol; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=asz*920.0*uDpr/(-mv.z); gl_Position=projectionMatrix*mv; }',
+        fragmentShader:'uniform sampler2D uTex; varying vec3 vC; void main(){ vec4 t=texture2D(uTex,gl_PointCoord); gl_FragColor=vec4(vC,1.0)*t.a*1.05; }' });
       const npts=new THREE.Points(ng,nmat); npts.frustumCulled=false; cosmicWeb.add(npts);
-      const segs=[], TH=42;
+      // filaments inherit the colors of the nodes they link
+      const fp=[], fc=[], TH=44;
       for(let i=0;i<N;i++){ let best=[]; for(let j=0;j<N;j++){ if(j===i) continue; const d=nodes[i].p.distanceTo(nodes[j].p); if(d<TH) best.push([d,j]); }
-        best.sort(function(a,b){return a[0]-b[0];}); best=best.slice(0,2); for(let b=0;b<best.length;b++){ const j=best[b][1]; if(j>i){ segs.push(nodes[i].p,nodes[j].p); } } }
-      if(segs.length){ const fg=new THREE.BufferGeometry().setFromPoints(segs);
-        const fil=new THREE.LineSegments(fg,new THREE.LineBasicMaterial({color:0x4a6ea8,transparent:true,opacity:0.085,depthWrite:false,blending:THREE.AdditiveBlending})); fil.frustumCulled=false; cosmicWeb.add(fil); }
+        best.sort(function(a,b){return a[0]-b[0];}); best=best.slice(0,2);
+        for(let b=0;b<best.length;b++){ const j=best[b][1]; if(j>i){ const A=nodes[i],B=nodes[j];
+          fp.push(A.p.x,A.p.y,A.p.z, B.p.x,B.p.y,B.p.z);
+          fc.push(A.c[0]*0.5,A.c[1]*0.5,A.c[2]*0.5, B.c[0]*0.5,B.c[1]*0.5,B.c[2]*0.5); } } }
+      if(fp.length){ const fg=new THREE.BufferGeometry(); fg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(fp),3)); fg.setAttribute('color',new THREE.BufferAttribute(new Float32Array(fc),3));
+        const fil=new THREE.LineSegments(fg,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:0.9,depthWrite:false,blending:THREE.AdditiveBlending})); fil.frustumCulled=false; cosmicWeb.add(fil); }
+      // quasar / AGN glows — the bright SMBH engines
       const quas=nodes.filter(function(n){return n.q;}); quas.sort(function(a,b){return b.s-a.s;});
-      for(let i=0;i<Math.min(6,quas.length);i++){ const g=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture(),color:0xffd9a0,transparent:true,opacity:0.26,depthWrite:false,blending:THREE.AdditiveBlending}));
-        g.position.copy(quas[i].p); const sc=6+quas[i].s*3; g.scale.set(sc,sc,1); g.userData.tw=rnd()*9; g.userData.b=0.26; cosmicWeb.add(g); cwGlows.push(g); }
-      for(let i=0;i<2 && i<quas.length;i++){ const r=new THREE.Sprite(new THREE.SpriteMaterial({map:ringTexture(),color:0xffb066,transparent:true,opacity:0.3,depthWrite:false,blending:THREE.AdditiveBlending}));
-        r.position.copy(quas[i].p); const sc=7+i*2; r.scale.set(sc,sc,1); cosmicWeb.add(r); }
+      for(let i=0;i<Math.min(11,quas.length);i++){ const warm=rnd()<0.6; const col=warm?0xffd29a:0xbfd6ff;
+        const g=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture(),color:col,transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending}));
+        g.position.copy(quas[i].p); const sc=8+quas[i].s*4; g.scale.set(sc,sc,1); g.userData.tw=rnd()*9; g.userData.b=0.5; cosmicWeb.add(g); cwGlows.push(g); }
+      // a few black-hole accretion rings
+      for(let i=0;i<3 && i<quas.length;i++){ const r=new THREE.Sprite(new THREE.SpriteMaterial({map:ringTexture(),color:0xffb066,transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending}));
+        r.position.copy(quas[i].p); const sc=8+i*3; r.scale.set(sc,sc,1); cosmicWeb.add(r); }
+      // huge faint nebula washes for atmospheric color depth
+      const NEB=[[0x2a4d8f,170],[0x6a2a7a,150],[0x1f6a60,140]];
+      for(let i=0;i<NEB.length;i++){ const u=rnd()*0.7+0.1, th=i*2.1+rnd(), r=150, sx=Math.sqrt(Math.max(0,1-u*u));
+        const nb=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture(),color:NEB[i][0],transparent:true,opacity:0.11,depthWrite:false,blending:THREE.AdditiveBlending}));
+        nb.position.set(sx*Math.cos(th)*r, Math.abs(u*r)*0.8+10, sx*Math.sin(th)*r); nb.scale.set(NEB[i][1],NEB[i][1],1); cosmicWeb.add(nb); }
     })();
 
     // ================= MATTER (shared geometry, pool of bodies) =================
