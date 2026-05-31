@@ -36,6 +36,20 @@
   #molPicker .mi.on{border-color:rgba(236,183,78,0.85);background:rgba(212,160,73,0.18);}
   #molPicker .mi .nm{font-size:14px;color:#e7eefc;}
   #molPicker .mi .fo{font-size:12px;color:#9fb3d6;letter-spacing:.04em;}
+  #benchPanel{position:fixed;top:60px;left:14px;z-index:19;background:rgba(7,9,15,0.78);border:1px solid rgba(212,160,73,0.25);border-radius:14px;padding:12px 13px 14px;width:248px;display:none;}
+  #benchPanel.show{display:block;}
+  #benchPanel .hd{font-family:ui-serif,Georgia,serif;font-size:17px;color:#e7eefc;margin:2px 2px 8px;letter-spacing:.03em;}
+  #benchPanel .lbl{font-size:12px;color:#9fb3d6;margin:8px 2px 5px;letter-spacing:.05em;text-transform:uppercase;}
+  #benchPanel .row{display:flex;flex-wrap:wrap;gap:5px;}
+  #benchPanel .chip{min-width:34px;text-align:center;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:14px;color:#cdd9ef;background:rgba(74,144,212,0.10);border:1px solid rgba(160,180,210,0.14);transition:all .14s;}
+  #benchPanel .chip:hover{border-color:rgba(236,183,78,0.6);}
+  #benchPanel .chip.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.20);color:#ffe2a6;}
+  #benchReact{margin-top:12px;width:100%;padding:10px;border-radius:9px;cursor:pointer;text-align:center;font-size:14px;letter-spacing:.04em;color:#0a0d14;background:linear-gradient(180deg,#ecb74e,#d4a049);border:none;font-weight:600;}
+  #benchReact:hover{filter:brightness(1.08);}
+  #benchPanel .lensrow{display:flex;gap:6px;margin-top:6px;}
+  #benchPanel .lensbtn{flex:1;text-align:center;padding:7px 6px;border-radius:8px;cursor:pointer;font-size:12px;color:#cdd9ef;background:rgba(74,144,212,0.10);border:1px solid rgba(160,180,210,0.14);transition:all .14s;}
+  #benchPanel .lensbtn:hover{border-color:rgba(236,183,78,0.6);}
+  #benchPanel .lensbtn.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.20);color:#ffe2a6;}
   #orbHint{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:18;color:#9fb3d6;font-size:13px;letter-spacing:.03em;background:rgba(7,9,15,0.6);padding:8px 18px;border-radius:22px;border:1px solid rgba(212,160,73,0.28);opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
   #orbHint.show{opacity:1;}
   #optBtn{position:fixed;top:14px;right:14px;z-index:20;width:34px;height:34px;border-radius:50%;
@@ -85,6 +99,14 @@
   </div>
 
   <div id="molPicker"><div class="hd">Molecules</div><div id="molList"></div></div>
+  <div id="benchPanel">
+    <div class="hd">Reaction Workbench</div>
+    <div class="lbl">Reagent A</div><div class="row" id="benchRowA"></div>
+    <div class="lbl">Reagent B</div><div class="row" id="benchRowB"></div>
+    <button id="benchReact">React</button>
+    <div class="lbl" style="margin-top:12px;">Lens of vision</div>
+    <div class="lensrow" id="benchLenses"></div>
+  </div>
   <div id="orbHint">Drag to orbit · scroll to zoom · click to build</div>
   <div id="optBtn" title="Options">&#9881;</div>
   <div id="optPanel">
@@ -120,6 +142,7 @@
     <div class="mode cur" id="modeSB"><span class="nm">Substrate Sandbox</span></div>
     <div class="mode" id="modePT"><span class="nm">Periodic Table</span></div>
     <div class="mode" id="modeMOL"><span class="nm">Molecules</span></div>
+    <div class="mode" id="modeBench"><span class="nm">Reaction Workbench</span></div>
     <div id="optNote">Point at any element and select it &mdash; it builds itself from the substrate, sized to its mass, coloured by its M. On laptop the element slowly turns; <b>drag to orbit it, scroll to zoom</b>. Noble gases wear a closed-shell halo.</div>
   </div>
 
@@ -332,6 +355,11 @@
     const BONDS=15; const bondPool=[];
     for(let i=0;i<BONDS;i++){ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
       const ln=new THREE.Line(g,new THREE.LineBasicMaterial({color:0x6fb0e0,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false})); ln.frustumCulled=false; ln.visible=false; scene.add(ln); bondPool.push(ln); }
+    // shared wavefronts — radiated when two clocks phase-lock through coupling (the joined closure's new wave)
+    const WF=16; const wavePool=[];
+    for(let i=0;i<WF;i++){ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:ringTexture(),color:0xecb74e,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false})); sp.visible=false; sp.frustumCulled=false; scene.add(sp); wavePool.push({sp:sp,age:0,life:1.1,r0:0,r1:0,str:0.5}); }
+    function emitWavefront(x,y,z,r0,strength){ for(const w of wavePool){ if(!w.sp.visible){ w.sp.visible=true; w.sp.position.set(x,y,z); w.age=0; w.life=1.2; w.r0=r0; w.r1=r0+7.0; w.str=strength; w.sp.material.opacity=0; return; } } }
+    function updateWavefronts(dt){ for(const w of wavePool){ if(!w.sp.visible) continue; w.age+=dt; const u=w.age/w.life; if(u>=1){ w.sp.visible=false; continue; } const r=w.r0+(w.r1-w.r0)*u; w.sp.scale.set(r,r,1); w.sp.material.opacity=w.str*0.6*(1-u)*(1-u); } }
 
     const spinAxis=new THREE.Vector3(0.16,1.0,0.10).normalize();
     const sm4=new THREE.Matrix4(), sm3=new THREE.Matrix3();
@@ -624,7 +652,8 @@
 {n:"Glucose",M:0.814,f:"C6H12O6",note:"Six-membered sugar ring (five carbons and an oxygen) hung with hydroxyls. Cellular fuel — a ring closure the body unwinds for energy.",a:"C,-0.592,-0.035,0.232,0.846;C,-0.514,0.019,-0.316,0.846;C,-0.092,0.283,-0.502,0.846;C,0.299,0.353,-0.091,0.846;C,0.331,-0.088,0.319,0.846;O,-0.124,-0.084,0.325,0.891;C,0.677,-0.537,0.468,0.846;H,0.953,-0.467,0.711,0;H,0.931,-0.677,0.222,0;O,0.711,-0.919,0.634,0.891;H,0.8,-1.288,0.805,0;H,-0.848,-0.275,0.359,0;H,-0.868,0.159,-0.45,0;H,0.092,0.134,-0.854,0;H,0.266,0.673,0.128,0;H,0.471,0.071,0.645,0;O,-0.877,0.241,0.508,0.891;H,-1.097,0.42,0.711,0;O,-0.699,-0.355,-0.553,0.891;H,-0.881,-0.661,-0.795,0;O,-0.172,0.602,-0.877,0.891;H,-0.229,0.822,-1.145,0;O,0.599,0.644,-0.197,0.891;H,0.865,0.964,-0.285,0",b:"0,1,1;1,2,1;2,3,1;3,4,1;4,5,1;5,0,1;4,6,1;6,7,1;6,8,1;6,9,1;9,10,1;0,11,1;1,12,1;2,13,1;3,14,1;4,15,1;0,16,1;16,17,1;1,18,1;18,19,1;2,20,1;20,21,1;3,22,1;22,23,1"},
 {n:"Adenine",M:0.781,f:"C5H5N5",note:"A fused double aromatic ring — the purine. One delocalised closure across both rings; pairs with thymine in DNA.",a:"N,0.287,0.576,0.025,0.819;C,0.509,0.555,-0.383,0.846;N,0.311,0.142,-0.494,0.819;C,0.095,-0.169,-0.334,0.846;C,-0.01,-0.107,0.147,0.846;C,0.047,0.333,0.295,0.846;N,-0.154,-0.566,0.16,0.819;C,-0.213,-0.86,-0.098,0.846;N,-0.163,-0.601,-0.459,0.819;N,-0.236,0.57,0.68,0.819;H,-0.561,0.78,0.758,0;H,-0.131,0.644,1.074,0;H,0.813,0.776,-0.535,0;H,-0.317,-1.31,-0.035,0;H,-0.277,-0.764,-0.801,0",b:"0,1,15;1,2,15;2,3,15;3,4,15;4,5,15;5,0,15;4,6,15;6,7,15;7,8,15;8,3,15;5,9,1;9,10,1;9,11,1;1,12,1;7,13,1;8,14,1"},
 {n:"Gly-Ala (dipeptide)",M:0.845,f:"C5H10N2O3",note:"Two amino acids fused into one closure. The gold peptide bond joins glycine's carboxyl to alanine's amino — a water leaves, two closures become one. This is the move that builds every protein.",a:"N,-1.129,-0.101,-0.564,0.819;H,-1.246,0.27,-0.744,0;H,-1.539,-0.139,-0.635,0;C,-0.796,-0.39,-0.416,0.846;H,-0.711,-0.536,-0.819,0;C,-0.372,-0.443,-0.09,0.846;O,-0.454,-0.821,0.043,0.891;H,-1.048,-0.706,-0.381,0;N,0.04,-0.328,0.2,0.819;H,0.177,-0.643,0.34,0;C,0.401,0.107,0.331,0.846;H,0.139,0.275,0.615,0;C,0.53,0.373,-0.05,0.846;O,0.745,0.251,-0.38,0.891;O,0.645,0.764,-0.259,0.891;H,0.727,1.073,-0.419,0;C,0.817,0.21,0.659,0.846;H,0.943,0.595,0.862,0;H,1.24,0.133,0.656,0;H,0.89,0.058,1.051,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;3,7,1;8,9,1;8,10,1;10,11,1;10,12,1;12,13,2;12,14,1;14,15,1;10,16,1;16,17,1;16,18,1;16,19,1;5,8,4"},
-{n:"Gly-Ala-Ser (tripeptide)",M:0.885,f:"C8H15N3O5",note:"Three residues, two gold peptide bonds — a chain. Repeat this and you have a protein: a backbone of linked closures, side chains hanging off to do the chemistry.",a:"N,-1.089,-1.43,-1.158,0.819;H,-1.128,-1.651,-1.52,0;H,-1.473,-1.594,-1.175,0;C,-0.773,-1.215,-0.906,0.846;H,-0.774,-0.908,-1.196,0;C,-0.669,-1.04,-0.427,0.846;O,-0.748,-1.412,-0.301,0.891;H,-0.473,-1.441,-1.09,0;N,-0.573,-0.766,0.03,0.819;H,-0.644,-1.047,0.248,0;C,-0.403,-0.285,0.287,0.846;H,-0.443,-0.473,0.657,0;C,0.159,-0.146,0.387,0.846;O,0.331,-0.437,0.483,0.891;C,-0.771,0.075,0.413,0.846;H,-0.886,0.295,0.74,0;H,-0.957,0.402,0.179,0;H,-1.191,0.009,0.469,0;N,0.537,0.249,0.378,0.819;H,0.841,0.094,0.508,0;C,0.732,0.789,0.292,0.846;H,0.491,0.959,0.073,0;C,1.096,0.891,-0.08,0.846;O,1.444,0.797,-0.077,0.891;O,1.211,1.041,-0.457,0.891;H,1.369,1.189,-0.822,0;C,0.854,1.177,0.613,0.846;H,0.579,1.511,0.682,0;H,0.877,1.112,1.024,0;O,1.141,1.502,0.789,0.891;H,1.332,1.751,0.955,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;3,7,1;8,9,1;8,10,1;10,11,1;10,12,1;12,13,2;10,14,1;14,15,1;14,16,1;14,17,1;5,8,4;18,19,1;18,20,1;20,21,1;20,22,1;22,23,2;22,24,1;24,25,1;20,26,1;26,27,1;26,28,1;26,29,1;29,30,1;12,18,4"}];
+{n:"Gly-Ala-Ser (tripeptide)",M:0.885,f:"C8H15N3O5",note:"Three residues, two gold peptide bonds — a chain. Repeat this and you have a protein: a backbone of linked closures, side chains hanging off to do the chemistry.",a:"N,-1.089,-1.43,-1.158,0.819;H,-1.128,-1.651,-1.52,0;H,-1.473,-1.594,-1.175,0;C,-0.773,-1.215,-0.906,0.846;H,-0.774,-0.908,-1.196,0;C,-0.669,-1.04,-0.427,0.846;O,-0.748,-1.412,-0.301,0.891;H,-0.473,-1.441,-1.09,0;N,-0.573,-0.766,0.03,0.819;H,-0.644,-1.047,0.248,0;C,-0.403,-0.285,0.287,0.846;H,-0.443,-0.473,0.657,0;C,0.159,-0.146,0.387,0.846;O,0.331,-0.437,0.483,0.891;C,-0.771,0.075,0.413,0.846;H,-0.886,0.295,0.74,0;H,-0.957,0.402,0.179,0;H,-1.191,0.009,0.469,0;N,0.537,0.249,0.378,0.819;H,0.841,0.094,0.508,0;C,0.732,0.789,0.292,0.846;H,0.491,0.959,0.073,0;C,1.096,0.891,-0.08,0.846;O,1.444,0.797,-0.077,0.891;O,1.211,1.041,-0.457,0.891;H,1.369,1.189,-0.822,0;C,0.854,1.177,0.613,0.846;H,0.579,1.511,0.682,0;H,0.877,1.112,1.024,0;O,1.141,1.502,0.789,0.891;H,1.332,1.751,0.955,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;3,7,1;8,9,1;8,10,1;10,11,1;10,12,1;12,13,2;10,14,1;14,15,1;14,16,1;14,17,1;5,8,4;18,19,1;18,20,1;20,21,1;20,22,1;22,23,2;22,24,1;24,25,1;20,26,1;26,27,1;26,28,1;26,29,1;29,30,1;12,18,4"},
+{n:"Octanoic acid (lipid)",M:0.779,f:"C8H16O2",note:"A fatty acid — a water-loving head on a water-fearing tail. That one asymmetry, repeated, is what builds every membrane: tails hide together, heads face the water. The first ingredient of a bounded cell.",a:"C,-0.677,-1.389,0.012,0.846;H,-1.041,-1.234,0.112,0.0;H,-0.942,-1.613,-0.262,0.0;H,-0.812,-1.704,0.257,0.0;C,-0.184,-1.235,-0.069,0.846;H,-0.173,-1.324,-0.421,0.0;H,-0.056,-1.583,0.038,0.0;C,0.291,-0.866,0.074,0.846;H,0.372,-1.041,0.399,0.0;H,0.569,-1.096,-0.110,0.0;C,0.481,-0.316,0.066,0.846;H,0.533,-0.268,0.479,0.0;H,0.887,-0.408,0.054,0.0;C,0.440,0.214,-0.166,0.846;H,0.659,0.177,-0.479,0.0;H,0.766,0.423,0.020,0.0;C,0.151,0.719,-0.290,0.846;H,-0.193,0.610,-0.509,0.0;H,0.299,0.842,-0.647,0.0;C,-0.039,1.205,-0.100,0.846;H,0.247,1.490,-0.215,0.0;H,-0.325,1.373,-0.332,0.0;C,-0.183,1.566,0.253,0.846;O,-0.211,1.916,0.224,0.891;O,-0.374,1.698,0.660,0.891;H,-0.487,1.843,0.954,0.0",b:"0,1,1;0,2,1;0,3,1;0,4,1;4,5,1;4,6,1;4,7,1;7,8,1;7,9,1;7,10,1;10,11,1;10,12,1;10,13,1;13,14,1;13,15,1;13,16,1;16,17,1;16,18,1;16,19,1;19,20,1;19,21,1;19,22,1;22,23,2;22,24,1;24,25,1"}];
     MOL.forEach(function(m){ m.atoms=m.a.split(';').map(function(t){var p=t.split(','); return {sym:p[0],x:+p[1],y:+p[2],z:+p[3],mn:+p[4]};});
       m.bonds=m.b?m.b.split(';').map(function(t){var p=t.split(','); return {i:+p[0],j:+p[1],o:+p[2]};}):[]; });
     const molCenter=new THREE.Vector3(0,1.3,-1.95);
@@ -724,21 +753,286 @@
       mbGeo.attributes.position.needsUpdate=true; mbGeo.attributes.color.needsUpdate=true; mbPts.visible=true;
       mbPts.material.opacity=0.55*smoothstep(0.2,0.8, matom[0]?matom[0].form:0); }
 
+    // ===================== REACTION WORKBENCH + VISION LENSES =====================
+    // The honest object a closure puts out is its SPECTRUM (full SPD, UV->visible->IR).
+    // "Colour" is a LENS projecting that spectrum through a sensor. Human vision = the three
+    // CIE 1931 cone responses integrated to sRGB (rigorous true colour). A lens is, by contract,
+    // a SET OF SPECTRAL-SENSITIVITY CURVES -> biology later just swaps the curve set (bee, shrimp).
+    // Reactivity here is read at the VALENCE scale (open coupling positions + electronegativity pull),
+    // deliberately NOT the nuclear binding M the periodic table shows. Nothing below is hand-painted.
+
+    // ---- honest spectra (emission lines from real atomic spectra; reflectance/appearance curves for bulk) ----
+    const SPEC = {
+      H:  {kind:'lines', lines:[[656.3,1.0],[486.1,0.42],[434.0,0.22],[410.2,0.12]], uv:'Lyman series (121 nm, 103 nm...) sits in the UV — you are blind to it.', label:'Hydrogen — Balmer emission'},
+      O:  {kind:'lines', lines:[[557.7,1.0],[630.0,0.55],[636.4,0.4],[777.4,0.6]], uv:'777 nm triplet is near-IR. The 557.7 nm line is the green of the aurora.', label:'Oxygen — auroral emission'},
+      C:  {kind:'lines', lines:[[516.5,1.0],[473.7,0.55],[563.5,0.45]], uv:'Swan bands — the green of comet tails and a candle flame edge.', label:'Carbon — Swan bands'},
+      N:  {kind:'lines', lines:[[391.4,1.0],[427.8,0.6],[470.9,0.4],[500.5,0.3]], uv:'Much of nitrogen\u2019s output is violet/UV — the blue edge of lightning.', label:'Nitrogen — molecular emission'},
+      Na: {kind:'lines', lines:[[589.0,1.0],[589.6,0.95]], uv:'Almost everything is in one doublet at 589 nm — the sodium streetlight yellow.', label:'Sodium — D-line emission'},
+      Cl: {kind:'curve', curve:[[300,0.05],[400,0.15],[450,0.35],[500,0.75],[550,0.95],[600,0.85],[650,0.55],[700,0.4],[800,0.3]], uv:'Cl\u2082 absorbs blue, so it transmits the yellow-green you see.', label:'Chlorine gas — transmission'},
+      F:  {kind:'curve', curve:[[300,0.1],[400,0.3],[450,0.55],[500,0.8],[550,0.9],[600,0.85],[650,0.7],[700,0.6],[800,0.5]], uv:'F\u2082 is a pale yellow — the most reactive element there is.', label:'Fluorine gas — transmission'},
+      Au: {kind:'curve', curve:[[300,0.32],[400,0.34],[450,0.36],[500,0.45],[520,0.55],[560,0.78],[600,0.9],[650,0.95],[700,0.96],[800,0.97]], uv:'Gold reflects red and yellow, drops in blue — that dip IS why gold looks gold. Real reflectance, not a label.', label:'Gold — reflectance'},
+      Ne: {kind:'lines', lines:[[585.2,1.0],[614.3,0.7],[640.2,0.85],[650.6,0.75],[703.2,0.5],[540.1,0.3]], uv:'Substrate-complete: it will not bond with anything. But excite it and its electrons still ring — the neon sign.', label:'Neon — emission'},
+      // products
+      H2O:{kind:'curve', curve:[[300,0.96],[400,0.98],[500,0.99],[600,0.95],[660,0.86],[700,0.8],[800,0.7]], uv:'Liquid water absorbs faintly in the red — the reason deep water is blue.', label:'Water — transmission'},
+      H2: {kind:'curve', curve:[[300,0.97],[400,0.98],[500,0.98],[600,0.98],[700,0.98],[800,0.98]], uv:'Colourless gas — flat across the visible.', label:'Hydrogen gas'},
+      CO2:{kind:'curve', curve:[[300,0.97],[400,0.98],[500,0.98],[600,0.98],[700,0.97],[800,0.9]], uv:'Colourless to the eye — but a strong absorber out in the thermal IR (15 \u00b5m). The greenhouse band lives where you can\u2019t see.', label:'Carbon dioxide'},
+      NaCl:{kind:'curve', curve:[[300,0.9],[400,0.93],[500,0.95],[600,0.95],[700,0.95],[800,0.94]], uv:'A white solid — reflects the whole visible band evenly.', label:'Sodium chloride'},
+      HF: {kind:'curve', curve:[[300,0.95],[400,0.97],[500,0.97],[600,0.97],[700,0.97],[800,0.96]], uv:'Colourless — but it eats glass.', label:'Hydrogen fluoride'},
+      NaF:{kind:'curve', curve:[[300,0.92],[400,0.94],[500,0.95],[600,0.95],[700,0.95],[800,0.94]], uv:'A white crystalline solid.', label:'Sodium fluoride'},
+      NH3:{kind:'curve', curve:[[300,0.94],[400,0.96],[500,0.97],[600,0.96],[700,0.95],[800,0.93]], uv:'Colourless gas, sharp smell — no strong visible feature.', label:'Ammonia'},
+      AuF:{kind:'curve', curve:[[300,0.4],[400,0.5],[450,0.6],[500,0.68],[560,0.74],[600,0.78],[700,0.8],[800,0.8]], uv:'Even gold yields to fluorine. The gold colour is gone — the closure changed.', label:'Gold fluoride'}
+    };
+
+    // ---- reagents (valence data straight from the element set) ----
+    const REAG = {
+      H: {sym:'H', name:'Hydrogen', pos:1, en:2.20, cls:'nonmetal', spec:'H'},
+      O: {sym:'O', name:'Oxygen',   pos:2, en:3.44, cls:'nonmetal', spec:'O'},
+      C: {sym:'C', name:'Carbon',   pos:4, en:2.55, cls:'nonmetal', spec:'C'},
+      N: {sym:'N', name:'Nitrogen', pos:3, en:3.04, cls:'nonmetal', spec:'N'},
+      Na:{sym:'Na',name:'Sodium',   pos:1, en:0.93, cls:'metal',    spec:'Na'},
+      Cl:{sym:'Cl',name:'Chlorine', pos:1, en:3.16, cls:'nonmetal', spec:'Cl'},
+      F: {sym:'F', name:'Fluorine', pos:1, en:3.98, cls:'nonmetal', spec:'F'},
+      Au:{sym:'Au',name:'Gold',     pos:1, en:2.54, cls:'noble_metal', spec:'Au'},
+      Ne:{sym:'Ne',name:'Neon',     pos:0, en:0.0,  cls:'noble_gas', spec:'Ne'}
+    };
+    const REAG_ORDER=['H','O','C','N','Na','Cl','F','Au','Ne'];
+
+    // curated products (already-measured molecules carry their substrate M)
+    const PROD = {
+      'H|O':  {name:'Water', f:'H\u2082O', spec:'H2O', M:0.308},
+      'H|H':  {name:'Dihydrogen', f:'H\u2082', spec:'H2', M:null},
+      'C|O':  {name:'Carbon dioxide', f:'CO\u2082', spec:'CO2', M:0.498},
+      'H|N':  {name:'Ammonia', f:'NH\u2083', spec:'NH3', M:0.378, conceptual:'takes three H per N'},
+      'H|F':  {name:'Hydrogen fluoride', f:'HF', spec:'HF', M:null},
+      'Cl|Na':{name:'Sodium chloride', f:'NaCl', spec:'NaCl', M:null},
+      'F|Na': {name:'Sodium fluoride', f:'NaF', spec:'NaF', M:null},
+      'Au|F': {name:'Gold fluoride', f:'AuF\u2083', spec:'AuF', M:null}
+    };
+
+    // the gate: read at the valence scale, NOT nuclear M
+    function reactRead(ak,bk){
+      const a=REAG[ak], b=REAG[bk]; const key=[ak,bk].sort().join('|');
+      if(a.pos===0 || b.pos===0){
+        const closed = a.pos===0?a:b;
+        return {couples:false, kind:'inert',
+          reason:closed.name+' is substrate-complete \u2014 a closed shell, zero open coupling positions. There is nothing to couple into. Even fluorine, which takes everything else, cannot open it.'};
+      }
+      if(a.cls==='noble_metal' && b.cls!=='nonmetal'){ }
+      if((a.cls==='noble_metal'||b.cls==='noble_metal')){
+        const other = a.cls==='noble_metal'? b : a;
+        if(other.sym!=='F'){
+          return {couples:false, kind:'inert',
+            reason:'Gold holds its own closure against almost everything \u2014 even oxygen leaves it untouched. Its coupling positions are real, but nothing here pulls hard enough to open them.'};
+        }
+      }
+      const dEN=Math.abs(a.en-b.en);
+      const ionic = dEN>=1.7 && ((a.cls==='metal'&&b.cls==='nonmetal')||(b.cls==='metal'&&a.cls==='nonmetal'));
+      const p=PROD[key]||null;
+      const violent = (a.sym==='F'||b.sym==='F');
+      let reason;
+      if(ionic){
+        reason='Large electronegativity gap ('+dEN.toFixed(2)+'): one closure pulls the shared coupling so hard it takes it outright. The bond is ionic \u2014 the two lock as oppositely-charged closures.';
+      } else {
+        reason='Both carry open coupling positions and the electronegativity pull ('+dEN.toFixed(2)+') is moderate \u2014 they share the coupling. A covalent closure forms.';
+      }
+      if(violent) reason='Fluorine has one open position and the strongest pull there is (EN 3.98). '+reason;
+      return {couples:true, kind:ionic?'ionic':'covalent', product:p, violent:violent, reason:reason};
+    }
+
+    // ---- CIE 1931 colour-matching functions (Wyman, Sloan & Shirley 2013 analytic fit) ----
+    function _g(x,mu,s1,s2){ const t=(x-mu)*((x<mu)?1.0/s1:1.0/s2); return Math.exp(-0.5*t*t); }
+    function cieX(l){ return 1.056*_g(l,599.8,37.9,31.0)+0.362*_g(l,442.0,16.0,26.7)-0.065*_g(l,501.1,20.4,26.2); }
+    function cieY(l){ return 0.821*_g(l,568.8,46.9,40.5)+0.286*_g(l,530.9,16.3,31.1); }
+    function cieZ(l){ return 1.217*_g(l,437.0,11.8,36.0)+0.681*_g(l,459.0,26.0,13.8); }
+
+    function spdAt(spec,l){
+      if(spec.kind==='lines'){ let v=0; const s=2.6; for(const ln of spec.lines){ const d=l-ln[0]; v+=ln[1]*Math.exp(-(d*d)/(2*s*s)); } return v; }
+      const c=spec.curve; if(l<=c[0][0]) return c[0][1]; if(l>=c[c.length-1][0]) return c[c.length-1][1];
+      for(let i=1;i<c.length;i++){ if(l<=c[i][0]){ const t=(l-c[i-1][0])/(c[i][0]-c[i-1][0]); return c[i-1][1]+(c[i][1]-c[i-1][1])*t; } }
+      return 0;
+    }
+    function xyz2srgb(X,Y,Z){
+      let r= 3.2406*X-1.5372*Y-0.4986*Z, g=-0.9689*X+1.8758*Y+0.0415*Z, b=0.0557*X-0.2040*Y+1.0570*Z;
+      r=Math.max(0,r); g=Math.max(0,g); b=Math.max(0,b); const mx=Math.max(r,g,b,1e-6); r/=mx; g/=mx; b/=mx;
+      const enc=v=>v<=0.0031308?12.92*v:1.055*Math.pow(v,1/2.4)-0.055;
+      return [clamp01(enc(r)),clamp01(enc(g)),clamp01(enc(b))];
+    }
+    // Human lens: integrate spectrum against the three cone curves -> sRGB (true colour)
+    function lensHuman(spec){ let X=0,Y=0,Z=0; for(let l=360;l<=780;l+=2){ const s=spdAt(spec,l); X+=s*cieX(l); Y+=s*cieY(l); Z+=s*cieZ(l); }
+      const n=Math.max(X+Y+Z,1e-6); return xyz2srgb(X/n,Y/n,Z/n); }
+    // true colour of a single wavelength (for drawing the visible band of the strip)
+    function waveRGB(l){ const n=Math.max(cieX(l)+cieY(l)+cieZ(l),1e-6); return xyz2srgb(cieX(l)/n,cieY(l)/n,cieZ(l)/n); }
+
+    // ---- lens contract: a lens is a set of spectral-sensitivity channels (biology swaps the set) ----
+    const LENSES=[
+      {name:'Human vision', kind:'human', channels:[
+        {label:'L cone (red)', curve:cieX}, {label:'M cone (green)', curve:cieY}, {label:'S cone (blue)', curve:cieZ} ]},
+      {name:'Full spectrum', kind:'full', channels:[]}
+    ];
+    let benchLens=0;
+
+    // ---- scene objects ----
+    const benchGroup=new THREE.Group(); benchGroup.visible=false; scene.add(benchGroup);
+    const benchCenter=new THREE.Vector3(0,1.55,-2.5);
+    function mkClos(){ const mt=makeBodyMat(); const p=new THREE.Points(cGeo,mt); p.visible=false; p.frustumCulled=false; benchGroup.add(p);
+      return {pts:p,u:mt.uniforms,center:new THREE.Vector3(),home:new THREE.Vector3(),form:0,wave:Math.random()*9,spin:Math.random()*9,radius:0.2,vis:false}; }
+    const closA=mkClos(), closB=mkClos(), closP=mkClos();
+
+    const BIW=900,BIH=1180; const bicv=document.createElement('canvas'); bicv.width=BIW; bicv.height=BIH; const bictx=bicv.getContext('2d');
+    const bitex=new THREE.CanvasTexture(bicv);
+    const benchInfo=new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95*BIH/BIW), new THREE.MeshBasicMaterial({map:bitex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
+    benchInfo.renderOrder=16; benchInfo.position.set(1.9,1.5,-2.2); benchInfo.rotation.y=-0.4; benchInfo.visible=false; benchGroup.add(benchInfo);
+
+    // ---- state ----
+    let benchA='H', benchB='O', benchResult=null;
+    let bphase='idle', bt=0, bWaveDone=false;
+
+    function tintFor(specKey){ const c=lensHuman(SPEC[specKey]); // lift dark colours so additive blobs stay visible
+      const mx=Math.max(c[0],c[1],c[2]); const lift=mx<0.5?0.5/Math.max(mx,0.05):1; return [clamp01(c[0]*lift),clamp01(c[1]*lift),clamp01(c[2]*lift)]; }
+
+    function placeReagents(){
+      closA.home.set(benchCenter.x-0.85,benchCenter.y,benchCenter.z); closB.home.set(benchCenter.x+0.85,benchCenter.y,benchCenter.z);
+      closA.center.copy(closA.home); closB.center.copy(closB.home); closP.center.copy(benchCenter);
+      const ca=tintFor(REAG[benchA].spec), cb=tintFor(REAG[benchB].spec);
+      closA.u.uHeld.value.setRGB(ca[0],ca[1],ca[2]); closB.u.uHeld.value.setRGB(cb[0],cb[1],cb[2]);
+      closA.radius=0.22; closB.radius=0.22; closA.form=1; closB.form=1; closA.vis=true; closB.vis=true; closP.vis=false; closP.form=0;
+      bphase='idle'; bWaveDone=false; benchResult=null;
+    }
+    function selectBench(slot,key){ if(slot==='A') benchA=key; else benchB=key; placeReagents(); drawBenchInfo(); refreshBenchChips(); }
+
+    function runReaction(){ const r=reactRead(benchA,benchB); benchResult=r; bt=0; bWaveDone=false;
+      if(r.couples){ bphase='approach'; if(r.product){ const pc=tintFor(r.product.spec); closP.u.uHeld.value.setRGB(pc[0],pc[1],pc[2]); } }
+      else { bphase='inert'; }
+      drawBenchInfo(); }
+
+    function setBenchLens(i){ benchLens=i; drawBenchInfo(); refreshLensButtons(); }
+
+    // ---- spectrum strip + reading ----
+    const STRIP_LO=300, STRIP_HI=820;
+    function drawStrip(ctx,spec,x0,y0,w,h){
+      // sample max for normalisation
+      let mx=1e-6; for(let l=STRIP_LO;l<=STRIP_HI;l+=2){ const v=spdAt(spec,l); if(v>mx) mx=v; }
+      const img=ctx.createImageData(w,h);
+      for(let px=0;px<w;px++){ const l=STRIP_LO+(px/w)*(STRIP_HI-STRIP_LO); const inten=spdAt(spec,l)/mx;
+        let r,g,b;
+        if(l<380){ r=110; g=40; b=170; }            // UV — false-coloured violet (you can't see it)
+        else if(l>720){ r=150; g=30; b=24; }         // IR — false-coloured deep red (you can't see it)
+        else { const c=waveRGB(l); r=c[0]*255; g=c[1]*255; b=c[2]*255; }
+        const bright = (l<380||l>720) ? 0.30+0.5*inten : (0.10+0.95*inten);
+        for(let py=0;py<h;py++){ const k=(py*w+px)*4; img.data[k]=r*bright; img.data[k+1]=g*bright; img.data[k+2]=b*bright; img.data[k+3]=255; } }
+      ctx.putImageData(img,x0,y0);
+      // emission line spikes
+      if(spec.kind==='lines'){ for(const ln of spec.lines){ const lx=x0+((ln[0]-STRIP_LO)/(STRIP_HI-STRIP_LO))*w; if(lx<x0||lx>x0+w) continue;
+        const vis=ln[0]>=380&&ln[0]<=720; const c=vis?waveRGB(ln[0]):[1,0.6,0.6];
+        ctx.fillStyle='rgba('+(c[0]*255|0)+','+(c[1]*255|0)+','+(c[2]*255|0)+',0.95)'; ctx.fillRect(lx-1.5,y0,3,h); } }
+      // visible-window markers
+      ctx.strokeStyle='rgba(231,238,252,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([4,5]);
+      const vx0=x0+((380-STRIP_LO)/(STRIP_HI-STRIP_LO))*w, vx1=x0+((720-STRIP_LO)/(STRIP_HI-STRIP_LO))*w;
+      ctx.beginPath(); ctx.moveTo(vx0,y0-6); ctx.lineTo(vx0,y0+h+6); ctx.moveTo(vx1,y0-6); ctx.lineTo(vx1,y0+h+6); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle='#7f8db0'; ctx.font='300 20px system-ui, sans-serif'; ctx.textAlign='center';
+      ctx.fillText('UV', x0+(vx0-x0)/2, y0+h+30); ctx.fillText('visible', (vx0+vx1)/2, y0+h+30); ctx.fillText('IR', vx1+(x0+w-vx1)/2, y0+h+30);
+      ctx.fillStyle='#5f7299'; ctx.font='300 17px system-ui, sans-serif';
+      ctx.fillText('300 nm', x0, y0+h+52); ctx.fillText('820 nm', x0+w, y0+h+52); ctx.textAlign='left';
+    }
+
+    function drawBenchInfo(){ const x=bictx; x.clearRect(0,0,BIW,BIH);
+      x.fillStyle='rgba(9,12,20,0.96)'; rrect(x,6,6,BIW-12,BIH-12,22); x.fill();
+      x.strokeStyle='rgba(212,160,73,0.4)'; x.lineWidth=2; rrect(x,6,6,BIW-12,BIH-12,22); x.stroke();
+      const A=REAG[benchA], B=REAG[benchB]; x.textAlign='left';
+      x.fillStyle='#e7eefc'; x.font='400 50px Georgia, serif'; x.fillText(A.name+'  +  '+B.name, 44, 90);
+
+      const r=benchResult;
+      let y=150;
+      if(!r){ x.fillStyle='#9fb3d6'; x.font='300 27px system-ui, sans-serif'; x.fillText('Bring two closures together and watch what the substrate does.',44,y); y+=44;
+        x.fillText('Press React.',44,y); y+=40; }
+      else if(r.couples){ x.fillStyle=r.violent?'#e8a04a':'#7fb27f'; x.font='600 30px system-ui, sans-serif';
+        x.fillText((r.violent?'\u26a1 reacts hard \u2014 ':'\u2713 they couple \u2014 ')+(r.kind==='ionic'?'ionic closure':'covalent closure'),44,y); y+=46;
+        if(r.product){ x.fillStyle='#e7eefc'; x.font='500 34px system-ui, sans-serif'; x.fillText('\u2192  '+r.product.name+'   '+r.product.f,44,y); y+=44;
+          if(r.product.M!=null){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('substrate-sustained  M = +'+r.product.M.toFixed(3)+'  (measured on the 128\u00b3 lattice)',44,y); y+=38; }
+          if(r.product.conceptual){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.conceptual+')',44,y); y+=34; } }
+      } else { x.fillStyle='#6fb0e0'; x.font='600 30px system-ui, sans-serif'; x.fillText('\u2014 no reaction',44,y); y+=44; }
+
+      if(r){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; const words=r.reason.split(' '); let line='',yy=y; const maxw=BIW-100;
+        for(const w of words){ const tt=line?line+' '+w:w; if(x.measureText(tt).width>maxw){ x.fillText(line,44,yy); line=w; yy+=34; } else line=tt; } x.fillText(line,44,yy); y=yy+30; }
+
+      // the spectrum panel — the honest object, shown through the chosen lens
+      const showKey = (r&&r.couples&&r.product)? r.product.spec : null;
+      const lens=LENSES[benchLens];
+      y+=18; x.fillStyle='#ecb74e'; x.font='600 27px system-ui, sans-serif';
+      x.fillText('Lens: '+lens.name, 44, y); y+=14;
+      x.fillStyle='#7f8db0'; x.font='300 21px system-ui, sans-serif';
+      x.fillText(lens.kind==='human'?'three cone curves integrated to the colour your eye builds':'the whole distribution laid out — including the bands you can\u2019t see', 44, y+24); y+=54;
+
+      function panelFor(specKey,title){ const spec=SPEC[specKey];
+        x.fillStyle='#cdd9ef'; x.font='400 23px system-ui, sans-serif'; x.fillText(title+'  \u2014  '+spec.label, 44, y); y+=14;
+        drawStrip(x, spec, 44, y, BIW-88, 70); y+=70+64;
+        if(lens.kind==='human'){ const c=lensHuman(spec); x.fillStyle='rgba(255,255,255,0.25)'; x.fillRect(44,y-8,150,54);
+          x.fillStyle='rgb('+(c[0]*255|0)+','+(c[1]*255|0)+','+(c[2]*255|0)+')'; rrect(x,46,y-6,146,50,8); x.fill();
+          x.fillStyle='#9fb3d6'; x.font='300 21px system-ui, sans-serif'; x.fillText('what your eye sees', 210, y+12);
+          x.fillText('sRGB '+(c[0]*255|0)+', '+(c[1]*255|0)+', '+(c[2]*255|0), 210, y+38); y+=70; }
+        else { x.fillStyle='#9fb3d6'; x.font='300 21px system-ui, sans-serif'; const ws=(spec.uv||'').split(' '); let ln='',yy=y; const mw=BIW-100;
+          for(const w of ws){ const tt=ln?ln+' '+w:w; if(x.measureText(tt).width>mw){ x.fillText(ln,44,yy); ln=w; yy+=30; } else ln=tt; } x.fillText(ln,44,yy); y=yy+40; } }
+
+      if(showKey){ panelFor(showKey,'Product spectrum'); }
+      else { panelFor(A.spec, A.name); if(y<BIH-260){ y+=10; panelFor(B.spec, B.name); } }
+
+      x.fillStyle='#5f7299'; x.font='300 19px system-ui, sans-serif';
+      x.fillText('Reactivity read at the valence scale (open coupling positions + electronegativity) \u2014 not the nuclear M the table shows.', 44, BIH-58);
+      x.fillText('Spectrum is the honest object; colour is a lens projecting it. Human lens = CIE 1931 cone integration \u2192 sRGB. Nothing is painted.', 44, BIH-32);
+      bitex.needsUpdate=true; }
+
+    // ---- per-frame ----
+    function driveClosure(c,dt){ if(!c.vis){ c.pts.visible=false; return; } c.pts.visible=true;
+      c.wave+=dt*2.0; c.spin+=dt*1.0; sm4.makeRotationAxis(spinAxis,c.spin); sm3.setFromMatrix4(sm4);
+      const wE=smoothstep(0.22,0.46,c.form), wB=smoothstep(0.6,1.0,c.form);
+      const u=c.u; u.uForm.value=c.form; u.uwEight.value=wE; u.uwBall.value=wB; u.uTwistZ.value=0.62*smoothstep(0.25,0.55,c.form);
+      u.uEightHi.value=wE*(1.0-wB); u.uWave.value=c.wave; u.uSpinMat.value.copy(sm3); u.uCenter.value.copy(c.center); u.uR.value=c.radius; }
+
+    function updateBench(dt,t){ bt+=dt;
+      if(bphase==='approach'){ const k=clamp01(bt/1.1); closA.center.lerpVectors(closA.home,benchCenter,k); closB.center.lerpVectors(closB.home,benchCenter,k);
+        // clocks pull into lock as they close
+        const sw=Math.sin(closB.wave-closA.wave); closA.wave+=sw*2.8*k*dt; closB.wave-=sw*2.8*k*dt;
+        if(k>=1){ bphase='lock'; bt=0; } }
+      else if(bphase==='lock'){ if(!bWaveDone){ emitWavefront(benchCenter.x,benchCenter.y,benchCenter.z, 0.5, benchResult&&benchResult.violent?1.0:0.7); bWaveDone=true; }
+        closA.form=clamp01(closA.form-dt*1.6); closB.form=clamp01(closB.form-dt*1.6); if(closA.form<0.5) closA.vis=closB.vis=false;
+        closP.vis=true; closP.radius=0.28; closP.form=clamp01(closP.form+dt*1.4); if(closP.form>=1){ bphase='done'; } }
+      else if(bphase==='inert'){ const k=Math.min(1,bt/0.7); const near=0.5; // approach then bounce apart
+        if(bt<0.7){ closA.center.lerpVectors(closA.home, new THREE.Vector3(benchCenter.x-near,benchCenter.y,benchCenter.z), k); closB.center.lerpVectors(closB.home, new THREE.Vector3(benchCenter.x+near,benchCenter.y,benchCenter.z), k); }
+        else { const j=Math.min(1,(bt-0.7)/0.9); closA.center.lerpVectors(new THREE.Vector3(benchCenter.x-near,benchCenter.y,benchCenter.z), closA.home, j); closB.center.lerpVectors(new THREE.Vector3(benchCenter.x+near,benchCenter.y,benchCenter.z), closB.home, j); if(j>=1) bphase='idle-inert'; } }
+      driveClosure(closA,dt); driveClosure(closB,dt); driveClosure(closP,dt); }
+
+    function refreshBenchChips(){ document.querySelectorAll('#benchPanel .chip').forEach(c=>{ const slot=c.getAttribute('data-slot'), key=c.getAttribute('data-key');
+        c.classList.toggle('on', (slot==='A'&&key===benchA)||(slot==='B'&&key===benchB)); }); }
+    function refreshLensButtons(){ document.querySelectorAll('#benchPanel .lensbtn').forEach((c,i)=> c.classList.toggle('on', i===benchLens)); }
+    let benchPanelBuilt=false;
+    function buildBenchPanel(){ if(benchPanelBuilt) return; benchPanelBuilt=true;
+      ['A','B'].forEach(slot=>{ const row=document.getElementById('benchRow'+slot); if(!row) return;
+        REAG_ORDER.forEach(key=>{ const el=document.createElement('div'); el.className='chip'; el.setAttribute('data-slot',slot); el.setAttribute('data-key',key);
+          el.textContent=REAG[key].sym; el.title=REAG[key].name; el.addEventListener('click',()=>selectBench(slot,key)); row.appendChild(el); }); });
+      const rb=document.getElementById('benchReact'); if(rb) rb.addEventListener('click',()=>runReaction());
+      const lr=document.getElementById('benchLenses'); if(lr){ LENSES.forEach((L,i)=>{ const el=document.createElement('div'); el.className='lensbtn'; el.textContent=L.name; el.addEventListener('click',()=>setBenchLens(i)); lr.appendChild(el); }); }
+      refreshBenchChips(); refreshLensButtons(); }
+    buildBenchPanel();
+
     function setMode(m){ mode=m;
-      const tbl=(m==='table'), mol=(m==='mol');
+      const tbl=(m==='table'), mol=(m==='mol'), bench=(m==='bench');
       tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol; if(mol) drawMolShelf();
+      benchGroup.visible=bench; benchInfo.visible=bench;
       const mp=document.getElementById('molPicker'); if(mp) mp.classList.toggle('show', mol && !renderer.xr.isPresenting); molShelf.visible = mol && renderer.xr.isPresenting;
+      const bp=document.getElementById('benchPanel'); if(bp) bp.classList.toggle('show', bench && !renderer.xr.isPresenting);
+      if(bench){ placeReagents(); drawBenchInfo(); refreshBenchChips(); refreshLensButtons(); } else { closA.vis=closB.vis=closP.vis=false; closA.pts.visible=closB.pts.visible=closP.pts.visible=false; }
       if(!tbl){ selZ=0; hoverZ=0; }
       if(!mol){ molSel=-1; molHover=-1; curMol=null; for(const a of matom){ a.active=false; a.pts.visible=false; } mbPts.visible=false; molInfo.visible=false; }
-      if(tbl||mol){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
-        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=mol?3.5:2.7; orbFocus.copy(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95)); applyDesktopCam(); } }
+      if(tbl||mol||bench){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
+        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=bench?3.4:(mol?3.5:2.7); orbFocus.copy(bench?new THREE.Vector3(0,1.55,-2.5):(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95))); applyDesktopCam(); } }
       else { if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); }
-      const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol) && !renderer.xr.isPresenting); }
+      const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol||bench) && !renderer.xr.isPresenting); }
     if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; }
 
     function interactBodies(dt){
       const H=[]; for(const b of pool) if(!b.free && b.held && !b.showcase) H.push(b);
       const RANGE=14.0;
+      for(const b of pool){ if(!b.free) b.locked=false; }
       for(let i=0;i<H.length;i++){ for(let j=i+1;j<H.length;j++){ const a=H[i], b=H[j];
         const dx=b.center.x-a.center.x, dy=b.center.y-a.center.y, dz=b.center.z-a.center.z; const d=Math.hypot(dx,dy,dz)+1e-4;
         if(d>RANGE) continue;
@@ -747,6 +1041,12 @@
         if(!a.grabbedBy){ a.vel.x+=nx*f*dt; a.vel.y+=ny*f*dt; a.vel.z+=nz*f*dt; }
         if(!b.grabbedBy){ b.vel.x-=nx*f*dt; b.vel.y-=ny*f*dt; b.vel.z-=nz*f*dt; }
         if(!a.grabbedBy && !b.grabbedBy && d<d0*2.6){ const prox=clamp01((d0*2.6-d)/(d0*1.6)); const dm=0.8*(a.mass-b.mass)*prox*dt; a.mass-=dm; b.mass+=dm; } // gradient reaction: equalize
+        // clocks align through coupling — Kuramoto phase-lock on wave + spin
+        if(!a.grabbedBy && !b.grabbedBy && a.form>0.5 && b.form>0.5){ const lockProx=clamp01((d0*2.8-d)/(d0*1.9));
+          if(lockProx>0.02){ const sw=Math.sin(b.wave-a.wave); a.wave+=sw*2.8*lockProx*dt; b.wave-=sw*2.8*lockProx*dt;
+            const ss=Math.sin(b.spin-a.spin); a.spin+=ss*2.2*lockProx*dt; b.spin-=ss*2.2*lockProx*dt;
+            let dphi=(b.wave-a.wave)%(2*Math.PI); if(dphi>Math.PI)dphi-=2*Math.PI; if(dphi<-Math.PI)dphi+=2*Math.PI;
+            const aligned=1-Math.min(1,Math.abs(dphi)/0.6); if(lockProx*aligned>0.25){ a.locked=true; b.locked=true; } } }
       }}
       const damp=Math.exp(-2.2*dt);
       for(const b of H){ if(b.grabbedBy){ b.vel.set(0,0,0); }
@@ -776,6 +1076,7 @@
       const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime; desktopMove(dt); oU.uTime.value=t;
       if(cosmicWeb){ for(let i=0;i<cwGlows.length;i++){ const g=cwGlows[i]; g.material.opacity=cosmosLevel*g.userData.b*(0.7+0.3*Math.sin(t*0.6+g.userData.tw)); } }
       if(fieldGroup.visible){ _fstepc++; if((_fstepc&1)===0){ fieldStep(); fieldRebuild(); } }
+      updateWavefronts(dt);
 
       if(renderer.xr.isPresenting && xrSession){ const srcs=xrSession.inputSources;
         for(let i=0;i<srcs.length && i<controllers.length;i++){ const gp=srcs[i].gamepad; const c=controllers[i]; if(!gp||!c) continue;
@@ -824,6 +1125,7 @@
         if(b.grabbedBy){ poseOf(b.grabbedBy,_o,_d); b.center.set(_o.x+_d.x*b.grabDist,_o.y+_d.y*b.grabDist,_o.z+_d.z*b.grabDist); }
         const wEight=smoothstep(0.22,0.46,b.form), wBall=smoothstep(0.82,1.0,b.form), twistZ=0.62*smoothstep(0.25,0.55,b.form);
         b.wave+=lerp(0,2.4,smoothstep(0.45,0.75,b.form))*dt; b.spin+=lerp(0,1.15,smoothstep(0.80,0.98,b.form))*dt;
+        if(b.locked){ const cyc=Math.floor(b.wave/(2*Math.PI)); if(b._wc===undefined) b._wc=cyc; else if(cyc>b._wc){ b._wc=cyc; emitWavefront(b.center.x, b.center.y+b.radius*1.15*b.form, b.center.z, b.radius*2.4, clamp01(0.4+b.form*0.6)); } } else b._wc=undefined;
         sm4.makeRotationAxis(spinAxis,b.spin); sm3.setFromMatrix4(sm4);
         const u=b.u; u.uForm.value=b.form; u.uwEight.value=wEight; u.uwBall.value=wBall; u.uTwistZ.value=twistZ; u.uEightHi.value=wEight*(1.0-wBall); u.uWave.value=b.wave; u.uSpinMat.value.copy(sm3); u.uCenter.value.copy(b.center); u.uR.value=b.radius;
         b.core.scale.set(b.radius*3.4,b.radius*3.4,1); b.core.position.set(b.center.x,b.center.y+b.radius*1.15*b.form,b.center.z); b.core.material.opacity=0.04+0.14*b.form; b.core.visible=b.form>0.02;
@@ -862,6 +1164,7 @@
       hudSprite.material.opacity=renderer.xr.isPresenting?0.5:0.0;
 
       if(mode==='mol') updateMolecule(dt,t);
+      if(mode==='bench') updateBench(dt,t);
       drawBonds(t);
       if(mode==='table' && showcase && !showcase.free && showcase.noble){ nobleHalo.visible=true; nobleHalo.position.set(showcase.center.x, showcase.center.y+showcase.radius*1.15*showcase.form, showcase.center.z); const hs=showcase.radius*4.3; nobleHalo.scale.set(hs,hs,1); nobleHalo.material.opacity=0.55*smoothstep(0.55,1.0,showcase.form); }
       else nobleHalo.visible=false;
@@ -879,6 +1182,7 @@
     function setCur(el){ document.querySelectorAll('#optPanel .mode').forEach(m=>m.classList.remove('cur')); if(el) el.classList.add('cur'); }
     pt.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('table'); setCur(pt); p.classList.remove('open'); });
     const ml=document.getElementById('modeMOL'); ml.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('mol'); setCur(ml); p.classList.remove('open'); });
+    const bw=document.getElementById('modeBench'); if(bw) bw.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('bench'); setCur(bw); p.classList.remove('open'); });
     sb.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('sandbox'); setCur(sb); p.classList.remove('open'); });
     const cosS=document.getElementById('cosmosSlider'), cosV=document.getElementById('cosmosVal');
     if(cosS){ cosS.addEventListener('input',()=>{ cosV.textContent=cosS.value+'%'; if(window.__eoeSetCosmos) window.__eoeSetCosmos(+cosS.value/100); }); }
