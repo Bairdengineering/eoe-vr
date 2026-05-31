@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>EoE — Standing in the Substrate (VR)</title>
+<style>
+  :root { --gold:#d4a049; --blue:#4a90d4; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; background:#05070d; overflow:hidden;
+    font-family: ui-serif, Georgia, "Times New Roman", serif; color:#e7eefc; }
+  #ui { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:22px; text-align:center; padding:32px; z-index:10; pointer-events:none;
+    background: radial-gradient(120% 90% at 50% 42%, rgba(74,144,212,0.10), transparent 62%); transition:opacity .8s ease; }
+  #title { font-size: clamp(22px, 6vw, 40px); letter-spacing:.06em; font-weight:400; }
+  #title b { color: var(--gold); font-weight:600; }
+  #sub { font-size: clamp(13px,3.4vw,16px); color:#9fb3d6; max-width:620px; line-height:1.6; font-family: ui-sans-serif, system-ui, sans-serif; }
+  #enter { pointer-events:auto; cursor:pointer; margin-top:6px; font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size:16px; letter-spacing:.14em; text-transform:uppercase; color:#05070d; background:var(--gold);
+    border:none; padding:16px 34px; border-radius:2px; box-shadow:0 0 0 1px rgba(212,160,73,.4), 0 0 40px rgba(212,160,73,.35);
+    transition: transform .2s ease, box-shadow .2s ease; }
+  #enter:hover { transform: translateY(-2px); box-shadow:0 0 0 1px rgba(212,160,73,.6), 0 0 60px rgba(212,160,73,.5); }
+  #hint { font-size:12px; color:#5f7299; font-family: ui-sans-serif, system-ui, sans-serif; letter-spacing:.05em; max-width:620px; line-height:1.7;}
+  .dim { opacity:0 !important; pointer-events:none; }
+  #cross { position:fixed; left:50%; top:50%; width:8px; height:8px; margin:-4px 0 0 -4px; border-radius:50%;
+    background:rgba(231,238,252,.5); box-shadow:0 0 8px rgba(212,160,73,.7); z-index:8; pointer-events:none; transition:opacity .3s; }
+  #hud { position:fixed; left:16px; bottom:14px; z-index:9; pointer-events:none; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size:12px; color:#9fb3d6; line-height:1.55; opacity:.85; text-shadow:0 0 8px rgba(0,0,0,.8); }
+  #hud b { color:#e7eefc; font-weight:600; } #hud .m { color: var(--gold); }
+</style>
+</head>
+<body>
+  <div id="ui">
+    <div id="title">Standing in the <b>Substrate</b></div>
+    <div id="sub">Point at the sea and hold the main trigger to draw matter up out of it. Squeeze the grip to hold that configuration &mdash; it stays, floating above the surface. Grip a held body to grab and move it. Build a little system in the air.</div>
+    <button id="enter">Enter VR</button>
+    <div id="hint">VR: trigger = feed &middot; grip = hold the body / grab &amp; move it &middot; Desktop: Space = feed, C = hold, G = grab under crosshair, WASD move, drag look</div>
+  </div>
+  <div id="cross"></div>
+  <div id="hud">
+    <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">substrate</span></div>
+    <div><b>&chi;s &minus; &lambda;</b> &nbsp; <span id="hudHeld">0 held</span></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  (function(){
+    const clamp01=x=>x<0?0:(x>1?1:x);
+    const smooth=u=>{u=clamp01(u);return u*u*(3-2*u);};
+    const smoothstep=(a,b,x)=>smooth((x-a)/(b-a));
+    const lerp=(a,b,t)=>a+(b-a)*t;
+    const DPR=Math.min(devicePixelRatio,2);
+
+    // ===================== TUNING =====================
+    const SURFACE_Y=0.0, OCEAN_R=36.0, OCEAN_COUNT=60000, DEPTH=0.7;
+    const R=0.42, POOL=6, PPB=7000;
+    const FEED_RATE=0.5, RELEASE_RATE=1.4, WARP_SIGMA=1.35, GRACE=3.0;
+    const BEAMS=3, STREAM=60;
+    // ==================================================
+
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+    renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(DPR); renderer.xr.enabled=true; renderer.setClearColor(0x05070d,1);
+    document.body.appendChild(renderer.domElement);
+    const scene=new THREE.Scene();
+    const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,0.02,220);
+    const rig=new THREE.Group(); rig.add(camera); scene.add(rig);
+    let dYaw=0,dPitch=-0.18,dPos=new THREE.Vector3(0,1.6,0);
+    function applyDesktopCam(){ if(renderer.xr.isPresenting) return; camera.position.set(0,0,0); rig.position.copy(dPos); camera.rotation.set(0,0,0); camera.rotateY(dYaw); camera.rotateX(dPitch); }
+    applyDesktopCam();
+
+    function ringTexture(){ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
+      x.clearRect(0,0,128,128); x.strokeStyle='rgba(231,200,120,0.95)'; x.lineWidth=8; x.beginPath(); x.arc(64,64,44,0,7); x.stroke();
+      x.strokeStyle='rgba(231,200,120,0.4)'; x.lineWidth=3; x.beginPath(); x.arc(64,64,58,0,7); x.stroke(); return new THREE.CanvasTexture(c); }
+    function radialTexture(){ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
+      const g=x.createRadialGradient(64,64,0,64,64,64); g.addColorStop(0,'rgba(255,226,150,0.85)'); g.addColorStop(0.4,'rgba(232,172,80,0.30)'); g.addColorStop(1,'rgba(0,0,0,0)');
+      x.fillStyle=g; x.fillRect(0,0,128,128); return new THREE.CanvasTexture(c); }
+
+    // ================= OCEAN =================
+    const oPos=new Float32Array(OCEAN_COUNT*3), oSeed=new Float32Array(OCEAN_COUNT);
+    for(let i=0;i<OCEAN_COUNT;i++){ const ang=Math.random()*Math.PI*2; const rad=OCEAN_R*Math.pow(Math.random(),1.6);
+      oPos[i*3]=Math.cos(ang)*rad; oPos[i*3+1]=SURFACE_Y-DEPTH*Math.pow(Math.random(),2.2); oPos[i*3+2]=Math.sin(ang)*rad; oSeed[i]=Math.random(); }
+    const oGeo=new THREE.BufferGeometry(); oGeo.setAttribute('position',new THREE.BufferAttribute(oPos,3)); oGeo.setAttribute('aSeed',new THREE.BufferAttribute(oSeed,1));
+    const oU={ uTime:{value:0}, uWarp:{value:0}, uWarpCenter:{value:new THREE.Vector3()}, uSize:{value:60.0}, uColor:{value:new THREE.Color('#2e74ad')}, uSigma:{value:WARP_SIGMA}, uDPR:{value:DPR} };
+    const oMat=new THREE.ShaderMaterial({ uniforms:oU, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      vertexShader:[
+        'attribute float aSeed;',
+        'uniform float uTime,uWarp,uSize,uSigma,uDPR; uniform vec3 uWarpCenter;',
+        'varying float vGlow; varying float vFog;',
+        'void main(){',
+        '  vec3 p=position;',
+        '  p.y += 0.06*sin(p.x*0.6+uTime*0.7)+0.05*sin(p.z*0.5+uTime*0.55)+0.03*sin((p.x+p.z)*0.3-uTime*0.4);',
+        '  vec2 dxz=p.xz-uWarpCenter.xz; float d=length(dxz); float g=exp(-(d*d)/(2.0*uSigma*uSigma));',
+        '  p.y -= uWarp*0.65*g; vec2 dir=dxz/(d+1e-4); p.xz -= dir*(uWarp*0.45*g);',
+        '  float a=uWarp*0.9*g; float ca=cos(a),sa=sin(a); vec2 rel=p.xz-uWarpCenter.xz;',
+        '  p.xz = uWarpCenter.xz + vec2(rel.x*ca-rel.y*sa, rel.x*sa+rel.y*ca);',
+        '  vGlow=g*uWarp;',
+        '  vec4 mv=modelViewMatrix*vec4(p,1.0); float dist=-mv.z; vFog=clamp(exp(-(dist-12.0)*0.038),0.0,1.0);',
+        '  gl_Position=projectionMatrix*mv; gl_PointSize=max(uSize*uDPR/dist, 1.4*uDPR);',
+        '}'
+      ].join('\n'),
+      fragmentShader:[
+        'precision mediump float; uniform vec3 uColor; varying float vGlow; varying float vFog;',
+        'void main(){ vec2 d=gl_PointCoord-vec2(0.5); float r=length(d); if(r>0.5) discard; float a=smoothstep(0.5,0.0,r);',
+        '  vec3 col=mix(uColor, vec3(0.85,0.74,0.45), clamp(vGlow*1.2,0.0,0.7));',
+        '  gl_FragColor=vec4(col*(0.9+1.0*vGlow), a*(0.34+0.5*vGlow)*vFog); }'
+      ].join('\n')
+    });
+    const ocean=new THREE.Points(oGeo,oMat); ocean.frustumCulled=false; scene.add(ocean);
+
+    // ================= MATTER (shared geometry, pool of bodies) =================
+    const cDisk=new Float32Array(PPB*3), cPhase=new Float32Array(PPB), cTube=new Float32Array(PPB*3), cSeed=new Float32Array(PPB);
+    for(let i=0;i<PPB;i++){ cSeed[i]=Math.random(); cPhase[i]=Math.random()*Math.PI*2;
+      const a=Math.random()*Math.PI*2, rr=R*Math.sqrt(Math.random()); cDisk[i*3]=Math.cos(a)*rr; cDisk[i*3+1]=(Math.random()-0.5)*0.06; cDisk[i*3+2]=Math.sin(a)*rr;
+      const su=Math.random(), sv=Math.random(), sth=2*Math.PI*su, sph=Math.acos(2*sv-1), sr=0.05*Math.cbrt(Math.random());
+      cTube[i*3]=sr*Math.sin(sph)*Math.cos(sth); cTube[i*3+1]=sr*Math.cos(sph); cTube[i*3+2]=sr*Math.sin(sph)*Math.sin(sth); }
+    const cGeo=new THREE.BufferGeometry();
+    cGeo.setAttribute('position',new THREE.BufferAttribute(cDisk,3)); cGeo.setAttribute('aPhase',new THREE.BufferAttribute(cPhase,1));
+    cGeo.setAttribute('aTube',new THREE.BufferAttribute(cTube,3)); cGeo.setAttribute('aSeed',new THREE.BufferAttribute(cSeed,1));
+    const VSHADER=[
+      'attribute float aPhase; attribute vec3 aTube; attribute float aSeed;',
+      'uniform float uForm,uwEight,uwBall,uTwistZ,uWave,uR,uSize,uEightHi,uDPR;',
+      'uniform mat3 uSpinMat; uniform vec3 uCenter;',
+      'varying float vForm; varying float vLat; varying float vWave; varying float vEight;',
+      'void main(){',
+      '  float t=aPhase;',
+      '  vec3 ring=vec3(cos(t),sin(t),0.0)*uR;',
+      '  vec3 eight=vec3(cos(t),sin(2.0*t),0.0)*uR*1.12; eight.z+=uTwistZ*sin(t)*uR;',
+      '  vec3 shape=mix(ring,eight,uwEight); shape.z+=0.04*uR*sin(2.0*t-uWave)*uwEight*(1.0-uwBall);',
+      '  float theta=acos(2.0*aSeed-1.0); float az=t+uWave;',
+      '  vec3 ball=vec3(sin(theta)*cos(az),cos(theta),sin(theta)*sin(az))*uR*1.05;',
+      '  shape=mix(shape,ball,uwBall); vLat=mix(0.0,(2.0*aSeed-1.0),uwBall); shape+=aTube*(1.0-0.3*uwBall); shape=uSpinMat*shape;',
+      '  vec3 lifted=shape+vec3(0.0,uR*1.15*uForm,0.0); vec3 world=uCenter+mix(position,lifted,uForm);',
+      '  vForm=uForm; vWave=0.5+0.5*sin(t-uWave); vEight=uEightHi;',
+      '  vec4 mv=modelViewMatrix*vec4(world,1.0); gl_Position=projectionMatrix*mv;',
+      '  gl_PointSize=max(uSize*uDPR*mix(0.5,1.2,uForm)*(1.0+0.55*uEightHi)/-mv.z, 1.6*uDPR);',
+      '}'
+    ].join('\n');
+    const FSHADER=[
+      'precision mediump float; uniform vec3 uHeld,uDissolved;',
+      'varying float vForm; varying float vLat; varying float vWave; varying float vEight;',
+      'void main(){ vec2 d=gl_PointCoord-vec2(0.5); float r=length(d); if(r>0.5) discard; float a=smoothstep(0.5,0.0,r);',
+      '  vec3 col=mix(uDissolved,uHeld,vForm); float bands=0.78+0.22*cos(vLat*8.0); float wave=0.82+0.34*vWave; float eh=1.0+0.45*vEight;',
+      '  gl_FragColor=vec4(col*bands*wave*eh, a*(0.26+0.40*vForm+0.20*vEight)); }'
+    ].join('\n');
+    function makeBodyMat(){ return new THREE.ShaderMaterial({ transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      uniforms:{ uForm:{value:0}, uwEight:{value:0}, uwBall:{value:0}, uTwistZ:{value:0}, uEightHi:{value:0}, uWave:{value:0},
+        uSpinMat:{value:new THREE.Matrix3()}, uR:{value:R}, uCenter:{value:new THREE.Vector3()}, uSize:{value:18.0}, uDPR:{value:DPR},
+        uHeld:{value:new THREE.Color('#ecb74e')}, uDissolved:{value:new THREE.Color('#2e74ad')} }, vertexShader:VSHADER, fragmentShader:FSHADER }); }
+
+    const pool=[];
+    for(let i=0;i<POOL;i++){ const m=makeBodyMat(); const p=new THREE.Points(cGeo,m); p.visible=false; p.frustumCulled=false; scene.add(p);
+      const core=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture(),color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+      core.scale.set(R*3.4,R*3.4,1); core.visible=false; scene.add(core);
+      pool.push({pts:p, u:m.uniforms, core:core, center:new THREE.Vector3(), form:0, wave:Math.random()*10, spin:Math.random()*10,
+        held:false, owner:null, dissolving:false, grabbedBy:null, grabDist:1.5, graceTimer:0, free:true}); }
+    function getFree(){ for(const b of pool) if(b.free) return b; return null; }
+
+    const spinAxis=new THREE.Vector3(0.16,1.0,0.10).normalize();
+    const sm4=new THREE.Matrix4(), sm3=new THREE.Matrix3();
+    const _o=new THREE.Vector3(), _d=new THREE.Vector3(), _q=new THREE.Quaternion(), _spot=new THREE.Vector3();
+
+    function poseOf(ref,outO,outD){ if(ref==='desktop'){ camera.getWorldPosition(outO); camera.getWorldDirection(outD); } else { ref.getWorldPosition(outO); outD.set(0,0,-1).applyQuaternion(ref.getWorldQuaternion(_q)); } }
+    function intersectSea(o,d,out){ if(Math.abs(d.y)<1e-4){ out.set(o.x,SURFACE_Y,o.z); return; } let tt=(SURFACE_Y-o.y)/d.y; if(tt<0) tt=30.0;
+      out.set(o.x+d.x*tt,SURFACE_Y,o.z+d.z*tt); const rad=Math.hypot(out.x,out.z); if(rad>OCEAN_R*0.9){ const s=OCEAN_R*0.9/rad; out.x*=s; out.z*=s; } }
+
+    function spawnBody(ref,spot){ const b=getFree(); if(!b) return null; b.free=false; b.center.copy(spot); b.form=0; b.held=false; b.owner=ref; b.dissolving=false; b.grabbedBy=null; b.graceTimer=0; b.pts.visible=true; b.core.visible=true; return b; }
+    function commitBody(b){ b.held=true; b.owner=null; b.graceTimer=0; }
+    function toPending(b){ if(b && !b.held){ b.owner=null; b.graceTimer=GRACE; } }
+    function releaseFeed(b){ if(b && !b.held){ b.dissolving=true; b.owner=null; } }
+    function tryGrab(ref){ poseOf(ref,_o,_d); let best=null,bestPerp=0.6;
+      for(const b of pool){ if(b.free||!b.held) continue; const vx=b.center.x-_o.x,vy=b.center.y-_o.y,vz=b.center.z-_o.z;
+        const tproj=vx*_d.x+vy*_d.y+vz*_d.z; if(tproj<0.15||tproj>8.0) continue;
+        const px=vx-_d.x*tproj,py=vy-_d.y*tproj,pz=vz-_d.z*tproj; const perp=Math.hypot(px,py,pz);
+        if(perp<bestPerp){ best=b; bestPerp=perp; best.grabDist=tproj; } }
+      if(best){ best.grabbedBy=ref; } return best; }
+
+    // ---- beams + streams ----
+    const sSeeds=new Float32Array(STREAM); for(let i=0;i<STREAM;i++) sSeeds[i]=Math.random();
+    const beams=[], streams=[];
+    for(let i=0;i<BEAMS;i++){ const bg=new THREE.BufferGeometry(); bg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+      const bm=new THREE.Line(bg,new THREE.LineBasicMaterial({color:0xe8c46a,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false})); bm.frustumCulled=false; bm.visible=false; scene.add(bm); beams.push(bm);
+      const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(STREAM*3),3));
+      const st=new THREE.Points(sg,new THREE.PointsMaterial({color:0xffd98a,size:0.12,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true})); st.frustumCulled=false; st.visible=false; scene.add(st); streams.push(st); }
+
+    // ---- reticles ----
+    const reticles=[];
+    for(let i=0;i<2;i++){ const rt=new THREE.Sprite(new THREE.SpriteMaterial({map:ringTexture(),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:0.5})); rt.scale.set(0.5,0.5,1); rt.visible=false; scene.add(rt); reticles.push(rt); }
+
+    // ---- VR hud ----
+    const hudCanvas=document.createElement('canvas'); hudCanvas.width=512; hudCanvas.height=140; const hctx=hudCanvas.getContext('2d');
+    const hudTex=new THREE.CanvasTexture(hudCanvas); const hudSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:hudTex,transparent:true,depthWrite:false,opacity:0})); hudSprite.scale.set(0.6,0.165,1); scene.add(hudSprite);
+    function drawVRHud(M,phase,held){ hctx.clearRect(0,0,512,140); hctx.textAlign='center';
+      hctx.font='600 52px ui-monospace, Menlo, monospace'; hctx.fillStyle=M>=0?'#d4a049':'#4a90d4'; hctx.fillText((M>=0?'+':'')+M.toFixed(2),256,58);
+      hctx.font='300 24px ui-sans-serif, system-ui, sans-serif'; hctx.fillStyle='#9fb3d6'; hctx.fillText(phase+'   \u00B7   '+held+' held',256,104); hudTex.needsUpdate=true; }
+    function phaseLabel(f){ if(f<0.04) return 'substrate'; if(f>0.95) return 'spinning'; if(f<0.30) return 'forming ring'; if(f<0.55) return 'twisting to \u221E'; if(f<0.82) return 'spinning up'; return 'becoming matter'; }
+    const hudM=document.getElementById('hudM'), hudPhase=document.getElementById('hudPhase'), hudHeld=document.getElementById('hudHeld'), crossEl=document.getElementById('cross');
+
+    // ---- desktop input ----
+    let dragging=false,pxv=0,pyv=0; const dom=renderer.domElement; const keys={};
+    let desktopActive=null, desktopLast=null, desktopGrab=false;
+    dom.addEventListener('pointerdown',e=>{ dragging=true; pxv=e.clientX; pyv=e.clientY; document.getElementById('ui').classList.add('dim'); });
+    addEventListener('pointerup',()=>dragging=false);
+    addEventListener('pointermove',e=>{ if(!dragging||renderer.xr.isPresenting) return; dYaw-=(e.clientX-pxv)*0.005; dPitch-=(e.clientY-pyv)*0.005; dPitch=Math.max(-1.3,Math.min(0.6,dPitch)); pxv=e.clientX; pyv=e.clientY; applyDesktopCam(); });
+    addEventListener('keydown',e=>{ keys[e.code]=true;
+      if(e.code==='Space'){ e.preventDefault(); if(!renderer.xr.isPresenting && !desktopActive){ poseOf('desktop',_o,_d); intersectSea(_o,_d,_spot); desktopActive=spawnBody('desktop',_spot); desktopLast=desktopActive; } }
+      if(e.code==='KeyC'){ let tg=desktopActive||((desktopLast&&!desktopLast.free&&!desktopLast.held)?desktopLast:null); if(tg&&!tg.held){ commitBody(tg); desktopActive=null; } }
+      if(e.code==='KeyG'){ if(!renderer.xr.isPresenting && !desktopGrab){ tryGrab('desktop'); desktopGrab=true; } } });
+    addEventListener('keyup',e=>{ keys[e.code]=false;
+      if(e.code==='Space'){ if(desktopActive){ toPending(desktopActive); desktopActive=null; } }
+      if(e.code==='KeyG'){ for(const b of pool) if(b.grabbedBy==='desktop') b.grabbedBy=null; desktopGrab=false; } });
+    function desktopMove(dt){ if(renderer.xr.isPresenting) return; const sp=3.2*dt, fx=Math.sin(dYaw), fz=-Math.cos(dYaw);
+      if(keys['KeyW']){ dPos.x+=fx*sp; dPos.z+=fz*sp; } if(keys['KeyS']){ dPos.x-=fx*sp; dPos.z-=fz*sp; }
+      if(keys['KeyA']){ dPos.x+=fz*sp; dPos.z-=fx*sp; } if(keys['KeyD']){ dPos.x-=fz*sp; dPos.z+=fx*sp; } applyDesktopCam(); }
+
+    // ---- VR / overlay ----
+    const ui=document.getElementById('ui'), enterBtn=document.getElementById('enter'); let controllers=[]; let vrAvailable=false; let xrSession=null;
+    function dismissOverlay(){ ui.classList.add('dim'); }
+    if(navigator.xr){ navigator.xr.isSessionSupported('immersive-vr').then(ok=>{ vrAvailable=ok; enterBtn.textContent=ok?'Enter VR':'Enter \u2014 Desktop View'; }).catch(()=>{enterBtn.textContent='Enter \u2014 Desktop View';}); }
+    else enterBtn.textContent='Enter \u2014 Desktop View';
+    enterBtn.addEventListener('click', async ()=>{ if(!vrAvailable){ dismissOverlay(); return; }
+      try{ const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
+        renderer.xr.setReferenceSpaceType('local-floor'); await renderer.xr.setSession(session); dismissOverlay();
+        rig.position.set(0,0,0); camera.position.set(0,0,0); camera.rotation.set(0,0,0); xrSession=session;
+        for(let i=0;i<2;i++){ const c=renderer.xr.getController(i); c.userData={trigPrev:false,gripPrev:false,active:null,last:null,grabbing:null}; scene.add(c); controllers.push(c); }
+        session.addEventListener('end',()=>ui.classList.remove('dim'));
+      }catch(err){ console.warn('VR session failed:',err); dismissOverlay(); }
+    });
+
+    // ---- loop ----
+    const clock=new THREE.Clock();
+    function tick(){
+      const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime; desktopMove(dt); oU.uTime.value=t;
+
+      if(renderer.xr.isPresenting && xrSession){ const srcs=xrSession.inputSources;
+        for(let i=0;i<srcs.length && i<controllers.length;i++){ const gp=srcs[i].gamepad; const c=controllers[i]; if(!gp||!c) continue;
+          const trig=!!(gp.buttons[0]&&gp.buttons[0].pressed); const grip=!!(gp.buttons[1]&&gp.buttons[1].pressed); const ud=c.userData;
+          if(trig&&!ud.trigPrev){ poseOf(c,_o,_d); intersectSea(_o,_d,_spot); ud.active=spawnBody(c,_spot); ud.last=ud.active; }
+          if(!trig&&ud.trigPrev){ toPending(ud.active); ud.active=null; }
+          ud.trigPrev=trig;
+          if(grip&&!ud.gripPrev){ let tg=ud.active||((ud.last&&!ud.last.free&&!ud.last.held)?ud.last:null); if(tg&&!tg.held){ commitBody(tg); ud.active=null; } else { ud.grabbing=tryGrab(c); } }
+          if(!grip&&ud.gripPrev){ if(ud.grabbing){ ud.grabbing.grabbedBy=null; ud.grabbing=null; } }
+          ud.gripPrev=grip;
+        }
+      }
+
+      let heldCount=0, activeForm=0, activeM=-0.95;
+      for(const b of pool){ if(b.free) continue;
+        if(b.owner) b.form+=(1.0-b.form)*dt*FEED_RATE;
+        else if(b.held) b.form+=(1.0-b.form)*dt*1.5;
+        else if(b.graceTimer>0){ b.form+=(1.0-b.form)*dt*1.2; b.graceTimer-=dt; if(b.graceTimer<=0) b.dissolving=true; }
+        else if(b.dissolving){ b.form+=(0.0-b.form)*dt*RELEASE_RATE; if(b.form<0.02){ b.free=true; b.pts.visible=false; b.core.visible=false; continue; } }
+        b.form=clamp01(b.form);
+        if(b.grabbedBy){ poseOf(b.grabbedBy,_o,_d); b.center.set(_o.x+_d.x*b.grabDist,_o.y+_d.y*b.grabDist,_o.z+_d.z*b.grabDist); }
+        const wEight=smoothstep(0.22,0.46,b.form), wBall=smoothstep(0.82,1.0,b.form), twistZ=0.62*smoothstep(0.25,0.55,b.form);
+        b.wave+=lerp(0,2.4,smoothstep(0.45,0.75,b.form))*dt; b.spin+=lerp(0,1.15,smoothstep(0.80,0.98,b.form))*dt;
+        sm4.makeRotationAxis(spinAxis,b.spin); sm3.setFromMatrix4(sm4);
+        const u=b.u; u.uForm.value=b.form; u.uwEight.value=wEight; u.uwBall.value=wBall; u.uTwistZ.value=twistZ; u.uEightHi.value=wEight*(1.0-wBall); u.uWave.value=b.wave; u.uSpinMat.value.copy(sm3); u.uCenter.value.copy(b.center);
+        b.core.position.set(b.center.x,b.center.y+R*1.15*b.form,b.center.z); b.core.material.opacity=0.04+0.14*b.form; b.core.visible=b.form>0.02;
+        if(b.held) heldCount++;
+        if(b.owner && b.form>activeForm){ activeForm=b.form; activeM=b.form*1.9-0.95; }
+      }
+
+      // ocean warp follows the body being actively fed
+      let wb=null,wf=0; for(const b of pool){ if(b.free) continue; if(b.owner && b.form>wf){ wf=b.form; wb=b; } }
+      if(wb){ oU.uWarp.value+=(smoothstep(0.1,1.0,wf)-oU.uWarp.value)*Math.min(1,dt*3); oU.uWarpCenter.value.copy(wb.center); }
+      else oU.uWarp.value+=(0-oU.uWarp.value)*Math.min(1,dt*2);
+
+      // beams + streams for active feeding bodies
+      let bi=0;
+      for(const b of pool){ if(b.free||!b.owner) continue; if(bi>=BEAMS) break;
+        poseOf(b.owner,_o,_d); const bm=beams[bi], st=streams[bi];
+        const arr=bm.geometry.attributes.position.array; arr[0]=_o.x;arr[1]=_o.y;arr[2]=_o.z; arr[3]=b.center.x;arr[4]=b.center.y+R*0.6*b.form;arr[5]=b.center.z; bm.geometry.attributes.position.needsUpdate=true;
+        bm.visible=true; bm.material.opacity=0.35+0.25*Math.sin(t*10.0); st.visible=true; st.material.opacity=0.9;
+        const sp=st.geometry.attributes.position.array; const ex=b.center.x, ey=b.center.y+R*0.6*b.form, ez=b.center.z;
+        for(let i=0;i<STREAM;i++){ const uu=(sSeeds[i]+t*1.1)%1.0; sp[i*3]=lerp(_o.x,ex,uu)+(sSeeds[i]-0.5)*0.05; sp[i*3+1]=lerp(_o.y,ey,uu); sp[i*3+2]=lerp(_o.z,ez,uu)+((sSeeds[i]*7.0)%1.0-0.5)*0.05; }
+        st.geometry.attributes.position.needsUpdate=true; bi++;
+      }
+      for(;bi<BEAMS;bi++){ beams[bi].visible=false; streams[bi].visible=false; }
+
+      // reticles
+      if(renderer.xr.isPresenting){ for(let i=0;i<2;i++){ const c=controllers[i]; if(c){ poseOf(c,_o,_d); intersectSea(_o,_d,_spot); reticles[i].position.set(_spot.x,SURFACE_Y+0.03,_spot.z); reticles[i].visible=true; reticles[i].material.opacity=0.5; } else reticles[i].visible=false; } }
+      else { poseOf('desktop',_o,_d); intersectSea(_o,_d,_spot); reticles[0].position.set(_spot.x,SURFACE_Y+0.03,_spot.z); reticles[0].visible=true; reticles[1].visible=false; }
+
+      // hud
+      const lab=phaseLabel(activeForm);
+      hudM.textContent=(activeM>=0?'+':'')+activeM.toFixed(2); hudM.style.color=activeM>=0?'#d4a049':'#4a90d4';
+      hudPhase.textContent=lab; hudHeld.textContent=heldCount+' held'; drawVRHud(activeM,lab,heldCount);
+      crossEl.style.opacity=renderer.xr.isPresenting?'0':'1';
+      camera.getWorldPosition(_o); camera.getWorldDirection(_d); hudSprite.position.set(_o.x+_d.x*1.6, _o.y+_d.y*1.6-0.45, _o.z+_d.z*1.6);
+      hudSprite.material.opacity=renderer.xr.isPresenting?0.5:0.0;
+
+      renderer.render(scene,camera);
+    }
+    renderer.setAnimationLoop(tick);
+    addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+  })();
+  </script>
+</body>
+</html>
