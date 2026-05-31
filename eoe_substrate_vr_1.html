@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>EoE — Substrate Closure (VR)</title>
+<style>
+  :root { --gold:#d4a049; --blue:#4a90d4; --deep:#003a66; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; background:#07080f; overflow:hidden;
+    font-family: ui-serif, Georgia, "Times New Roman", serif; color:#e7eefc; }
+  #ui {
+    position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:22px; text-align:center;
+    padding:32px; z-index:10; pointer-events:none;
+    background: radial-gradient(120% 90% at 50% 38%, rgba(74,144,212,0.08), transparent 60%);
+    transition: opacity .8s ease;
+  }
+  #title { font-size: clamp(22px, 6vw, 40px); letter-spacing:.06em; font-weight:400; }
+  #title b { color: var(--gold); font-weight:600; }
+  #sub { font-size: clamp(13px,3.4vw,16px); color:#9fb3d6; max-width:540px; line-height:1.6;
+    font-family: ui-sans-serif, system-ui, sans-serif; }
+  #enter {
+    pointer-events:auto; cursor:pointer; margin-top:6px;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size:16px; letter-spacing:.14em;
+    text-transform:uppercase; color:#07080f; background:var(--gold);
+    border:none; padding:16px 34px; border-radius:2px;
+    box-shadow:0 0 0 1px rgba(212,160,73,.4), 0 0 40px rgba(212,160,73,.35);
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  #enter:hover { transform: translateY(-2px); box-shadow:0 0 0 1px rgba(212,160,73,.6), 0 0 60px rgba(212,160,73,.5); }
+  #enter:disabled { background:#26303f; color:#7e93b5; box-shadow:none; cursor:default; }
+  #hint { font-size:12px; color:#5f7299; font-family: ui-sans-serif, system-ui, sans-serif; letter-spacing:.05em; }
+  .dim { opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+  <div id="ui">
+    <div id="title">The <b>Substrate</b> Closure</div>
+    <div id="sub">You're standing inside a field. A twist pulls a closure together out of it — it holds, breathes at its own frequency, then dissolves back into the substrate, and rebuilds. The whole margin cycle, around your head.</div>
+    <button id="enter">Enter VR</button>
+    <div id="hint">Quest: open this page in the Quest Browser, then Enter VR · squeeze a trigger to feed the field · Desktop: drag to look</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  (function(){
+    const clamp01 = x => x < 0 ? 0 : (x > 1 ? 1 : x);
+    const smooth  = u => { u = clamp01(u); return u*u*(3-2*u); };
+    const smoothstep = (a,b,x) => smooth((x-a)/(b-a));
+
+    // ---- renderer / scene / camera ----
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#07080f');
+
+    const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 100);
+    const TARGET = new THREE.Vector3(0, 1.4, 0); // closure centered near head height
+
+    // ---- subtle floor grid for VR grounding ----
+    const grid = new THREE.GridHelper(12, 24, 0x1d3a5c, 0x12233a);
+    grid.material.opacity = 0.18; grid.material.transparent = true;
+    scene.add(grid);
+
+    // ---- the substrate point field ----
+    const COUNT = 60000;
+    const positions = new Float32Array(COUNT * 3);
+    const seeds = new Float32Array(COUNT);
+    for (let i = 0; i < COUNT; i++) {
+      // uniform in a ball, radius ~2.4, centered at TARGET
+      const u = Math.random(), v = Math.random();
+      const theta = 2*Math.PI*u, phi = Math.acos(2*v - 1);
+      const rad = 2.4 * Math.cbrt(Math.random());
+      positions[i*3+0] = rad*Math.sin(phi)*Math.cos(theta);
+      positions[i*3+1] = rad*Math.cos(phi) + 1.4;
+      positions[i*3+2] = rad*Math.sin(phi)*Math.sin(theta);
+      seeds[i] = Math.random();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+
+    const uniforms = {
+      uTime:  { value: 0 },
+      uAmp:   { value: 0 },   // closure amplitude 0..1 (from margin M)
+      uDrive: { value: 0 },   // interaction boost
+      uSize:  { value: (Math.min(devicePixelRatio,2)) }
+    };
+
+    const vert = `
+      attribute float aSeed;
+      uniform float uTime, uAmp, uDrive, uSize;
+      varying float vI;
+      void main(){
+        float t = uTime;
+        vec3 p = position;
+        vec3 cen = p - vec3(0.0,1.4,0.0);   // center about the closure
+        float r = length(cen);
+
+        // --- twist: helical rotation, angle varies with height = real twist ---
+        float ang = t*0.35 + cen.y*0.9 + uDrive*1.6;
+        float c = cos(ang), s = sin(ang);
+        vec3 pr = vec3(c*cen.x - s*cen.z, cen.y, s*cen.x + c*cen.z);
+
+        // --- toroidal closure: bright standing-wave ring ---
+        float R = 1.05;
+        float ring = length(vec2(length(pr.xz) - R, pr.y));
+        float wave = 0.5 + 0.5*cos(ring*7.0 - t*2.2);
+        float core = exp(-ring*ring*2.2) * wave;
+
+        // --- inner breathing node at the core ---
+        float node = exp(-r*r*3.0) * (0.5 + 0.5*cos(r*9.0 - t*2.6));
+        core = max(core, node*0.85);
+
+        // --- substrate baseline: field is always faintly alive ---
+        float flick = 0.5 + 0.5*sin(t*1.7 + aSeed*44.0);
+        float base = 0.05 * flick;
+
+        float intensity = core * uAmp + base;
+
+        // --- dissolution: low amplitude -> scatter outward into the field ---
+        float dissolve = 1.0 - uAmp;
+        vec3 dir = normalize(pr + 1e-4);
+        vec3 drift = dir * dissolve * (0.55 + 0.45*sin(t*0.8 + aSeed*30.0));
+        vec3 world = pr + drift + vec3(0.0,1.4,0.0);
+
+        vec4 mv = modelViewMatrix * vec4(world, 1.0);
+        gl_Position = projectionMatrix * mv;
+
+        vI = intensity;
+        float sz = 11.0 * uSize * (0.35 + intensity*2.3);
+        gl_PointSize = clamp(sz * (1.0 / -mv.z), 1.0, 42.0);
+      }
+    `;
+    const frag = `
+      precision mediump float;
+      varying float vI;
+      void main(){
+        vec2 q = gl_PointCoord - 0.5;
+        float d = length(q);
+        if (d > 0.5) discard;
+        float a = smoothstep(0.5, 0.0, d);
+        vec3 colLow  = vec3(0.10, 0.22, 0.46);  // deep substrate blue
+        vec3 colMid  = vec3(0.22, 0.55, 0.74);  // teal-blue
+        vec3 colHot  = vec3(0.83, 0.63, 0.29);  // gold #d4a049
+        vec3 colPeak = vec3(1.00, 0.97, 0.88);  // near white
+        float i = vI;
+        vec3 col = mix(colLow, colMid, smoothstep(0.05, 0.35, i));
+        col = mix(col, colHot,  smoothstep(0.35, 0.78, i));
+        col = mix(col, colPeak, smoothstep(0.88, 1.40, i));
+        gl_FragColor = vec4(col, a * clamp(i*1.4 + 0.04, 0.0, 1.0));
+      }
+    `;
+    const mat = new THREE.ShaderMaterial({
+      uniforms, vertexShader:vert, fragmentShader:frag,
+      blending: THREE.AdditiveBlending, depthWrite:false, transparent:true
+    });
+    const points = new THREE.Points(geo, mat);
+    points.frustumCulled = false;
+    scene.add(points);
+
+    // ---- floating readout (M + phase) ----
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
+    const ctx = cv.getContext('2d');
+    const tex = new THREE.CanvasTexture(cv);
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.72, 0.36),
+      new THREE.MeshBasicMaterial({ map:tex, transparent:true, depthTest:false, depthWrite:false })
+    );
+    panel.position.set(0, 1.48, -1.9);
+    panel.renderOrder = 2;
+    scene.add(panel);
+
+    let lastDraw = 0;
+    function drawReadout(M, phase){
+      ctx.clearRect(0,0,512,256);
+      ctx.fillStyle = 'rgba(8,11,24,0.55)';
+      roundRect(ctx, 6,6,500,244,18); ctx.fill();
+      ctx.strokeStyle = 'rgba(74,144,212,0.35)'; ctx.lineWidth = 2;
+      roundRect(ctx, 6,6,500,244,18); ctx.stroke();
+      const pos = M >= 0;
+      ctx.fillStyle = pos ? '#e9c074' : '#6fa8e0';
+      ctx.font = '600 92px Georgia, serif'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('M = ' + (pos?'+':'') + M.toFixed(2), 34, 116);
+      ctx.fillStyle = '#9fb3d6';
+      ctx.font = '400 34px ui-sans-serif, system-ui, sans-serif';
+      ctx.fillText(phase, 36, 168);
+      // margin bar  (-1 .. +1)
+      const bx=36, by=196, bw=440, bh=20;
+      ctx.fillStyle='rgba(255,255,255,0.08)'; roundRect(ctx,bx,by,bw,bh,10); ctx.fill();
+      const zero = bx + bw*0.5;
+      ctx.fillStyle = pos ? 'rgba(212,160,73,0.85)' : 'rgba(74,144,212,0.85)';
+      const x = bx + bw*((clamp01((M+1)/2)));
+      if (M>=0) ctx.fillRect(zero, by, x-zero, bh); else ctx.fillRect(x, by, zero-x, bh);
+      ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fillRect(zero-1, by-3, 2, bh+6);
+      tex.needsUpdate = true;
+    }
+    function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y);
+      c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+      c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+
+    // ---- the margin cycle: growth -> hold -> collapse -> rebuild ----
+    function marginCycle(t){
+      const T = 26.0; const x = t % T; let M, phase;
+      if (x < 6)        { M = -0.40 + smooth(x/6)*1.15;            phase='FORMING'; }
+      else if (x < 14)  { M = 0.62 + 0.14*Math.sin((x-6)*1.35);    phase='HOLDING'; }
+      else if (x < 19)  { M = 0.62 - smooth((x-14)/5)*1.20;        phase='DISSOLVING'; }
+      else              { M = -0.58 + smooth((x-19)/7)*0.22;       phase='REBUILDING'; }
+      return { M, phase };
+    }
+
+    // ---- controllers: squeeze a trigger to feed the field (raise throughput s) ----
+    let drive = 0;
+    for (let i=0;i<2;i++){
+      const ctrl = renderer.xr.getController(i);
+      ctrl.addEventListener('selectstart', ()=>{ drive += 0.5; });
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.012, 0.07, 12),
+        new THREE.MeshBasicMaterial({ color:0xd4a049 })
+      );
+      cone.rotation.x = -Math.PI/2; cone.position.z = -0.04;
+      ctrl.add(cone); scene.add(ctrl);
+    }
+
+    // ---- desktop look controls (ignored while in VR) ----
+    let theta = 0.4, phi = 1.25, dist = 4.0, dragging = false, px=0, py=0, auto=true;
+    renderer.domElement.addEventListener('pointerdown', e=>{ dragging=true; auto=false; px=e.clientX; py=e.clientY; });
+    addEventListener('pointerup', ()=>{ dragging=false; });
+    addEventListener('pointermove', e=>{
+      if(!dragging) return;
+      theta -= (e.clientX-px)*0.005; phi -= (e.clientY-py)*0.005;
+      phi = Math.max(0.25, Math.min(2.6, phi)); px=e.clientX; py=e.clientY;
+    });
+    renderer.domElement.addEventListener('wheel', e=>{ dist = Math.max(1.2, Math.min(8, dist + e.deltaY*0.002)); }, {passive:true});
+    function updateDesktopCamera(){
+      if (auto) theta += 0.0016;
+      camera.position.set(
+        TARGET.x + dist*Math.sin(phi)*Math.cos(theta),
+        TARGET.y + dist*Math.cos(phi),
+        TARGET.z + dist*Math.sin(phi)*Math.sin(theta)
+      );
+      camera.lookAt(TARGET);
+    }
+    camera.position.set(0,1.4,4); camera.lookAt(TARGET);
+
+    // ---- VR entry (hand-rolled, robust) ----
+    const enter = document.getElementById('enter');
+    const ui = document.getElementById('ui');
+    let session = null;
+    (async function initVR(){
+      if (navigator.xr && await navigator.xr.isSessionSupported('immersive-vr').catch(()=>false)) {
+        enter.onclick = async () => {
+          if (session) { session.end(); return; }
+          try {
+            session = await navigator.xr.requestSession('immersive-vr',
+              { optionalFeatures:['local-floor','bounded-floor','hand-tracking'] });
+            renderer.xr.setReferenceSpaceType('local-floor');
+            await renderer.xr.setSession(session);
+            enter.textContent = 'Exit VR'; ui.classList.add('dim');
+            session.addEventListener('end', ()=>{ session=null; enter.textContent='Enter VR'; ui.classList.remove('dim'); });
+          } catch(err){ document.getElementById('hint').textContent = 'Could not start VR: ' + err.message; }
+        };
+      } else {
+        enter.textContent = 'VR not detected'; enter.disabled = true;
+        document.getElementById('hint').textContent = 'Open in the Quest Browser to enter VR · drag to look here';
+      }
+    })();
+
+    // ---- loop ----
+    let dt = 0;
+    renderer.setAnimationLoop((time)=>{
+      const t = (time||0) * 0.001;
+      const { M:rawM, phase } = marginCycle(t);
+      let M = Math.min(1.0, rawM + drive);
+      drive *= 0.95; if (drive < 0.001) drive = 0;
+      const amp = clamp01(smoothstep(-0.15, 0.62, M));
+      uniforms.uTime.value = t;
+      uniforms.uAmp.value = amp;
+      uniforms.uDrive.value = clamp01(drive);
+      if (t - dt > 0.12) { drawReadout(M, drive>0.02 ? 'FEEDING' : phase); dt = t; }
+      if (!renderer.xr.isPresenting) updateDesktopCamera();
+      renderer.render(scene, camera);
+    });
+
+    addEventListener('resize', ()=>{
+      camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  })();
+  </script>
+</body>
+</html>
