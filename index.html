@@ -115,7 +115,7 @@
   </div>
   <div id="cellPanel">
     <div class="hd">Single Cell</div>
-    <div style="font-size:12px;color:#9fb3d6;line-height:1.6;margin:0 2px 10px;">A bounded closure that lives on throughput. Feed it and it holds; cut the flow and watch the books go red while its reserve coasts down.</div>
+    <div style="font-size:12px;color:#9fb3d6;line-height:1.6;margin:0 2px 10px;">A bounded closure that lives on throughput. An incubator keeps it fed and holding. Cut the incubator and watch the books go red while its reserve coasts down &mdash; restart before it empties to rescue it.</div>
     <button id="cellFeed">Feeding — cut the flow</button>
     <button id="cellNew" style="margin-top:8px;background:rgba(74,144,212,0.12);color:#cdd9ef;">New cell</button>
   </div>
@@ -1046,11 +1046,11 @@
       const s=Math.sqrt(1-u*u); a[i*3]=rr*s*Math.cos(th); a[i*3+1]=rr*u; a[i*3+2]=rr*s*Math.sin(th); } return a; }
     function ballFill(n,rmax){ const a=new Float32Array(n*3); for(let i=0;i<n;i++){ const u=Math.random()*2-1, th=Math.random()*Math.PI*2, rr=rmax*Math.cbrt(Math.random());
       const s=Math.sqrt(1-u*u); a[i*3]=rr*s*Math.cos(th); a[i*3+1]=rr*u; a[i*3+2]=rr*s*Math.sin(th); } return a; }
-    const memGeo=new THREE.BufferGeometry(); memGeo.setAttribute('position',new THREE.BufferAttribute(sphereShell(2600,1.02,1.13),3));
-    const memMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.05,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+    const memGeo=new THREE.BufferGeometry(); memGeo.setAttribute('position',new THREE.BufferAttribute(sphereShell(7000,1.05,1.10),3));
+    const memMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.028,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
     const memPts=new THREE.Points(memGeo,memMat); memPts.frustumCulled=false; cellGroup.add(memPts);
-    const lumGeo=new THREE.BufferGeometry(); lumGeo.setAttribute('position',new THREE.BufferAttribute(ballFill(3600,0.97),3));
-    const lumMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.055,transparent:true,opacity:0.5,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+    const lumGeo=new THREE.BufferGeometry(); lumGeo.setAttribute('position',new THREE.BufferAttribute(ballFill(1500,0.92),3));
+    const lumMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.075,transparent:true,opacity:0.32,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
     const lumPts=new THREE.Points(lumGeo,lumMat); lumPts.frustumCulled=false; cellGroup.add(lumPts);
     memPts.position.copy(CELL.center); lumPts.position.copy(CELL.center);
 
@@ -1062,7 +1062,7 @@
     const cellInfo=new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95*CIH/CIW), new THREE.MeshBasicMaterial({map:ctex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     cellInfo.renderOrder=16; cellInfo.position.set(1.95,1.7,-2.55); cellInfo.rotation.y=-0.45; cellInfo.visible=false; cellGroup.add(cellInfo);
 
-    function cellReset(){ cellState={ sigma:0.0, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0 }; refreshCellBtns(); drawCellInfo(); }
+    function cellReset(){ cellState={ sigma:0.98, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0 }; refreshCellBtns(); drawCellInfo(); }
     function cellSetFed(f){ if(cellState.deadAt!=null) return; cellState.fed=f; refreshCellBtns(); }
 
     function drawCellInfo(){ const x=cctx, S=cellState; x.clearRect(0,0,CIW,CIH);
@@ -1084,7 +1084,7 @@
         x.fillStyle=S.deadAt!=null?'#5b5d68':(M>=0?'#ecb74e':'#e8a04a'); rrect(x,bx,y,bw*clamp01(S.sigma),bh,9); x.fill(); }
       // feed indicator
       x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif';
-      x.fillText('throughput: '+((S.fed&&S.deadAt==null)?'feeding (s = '+CELL.Jfed.toFixed(2)+')':'cut (s = 0)'),44,392);
+      x.fillText('throughput: '+((S.fed&&S.deadAt==null)?'incubator feeding (s = '+CELL.Jfed.toFixed(2)+')':'incubator cut (s = 0)'),44,392);
       // honest line
       x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif';
       const note = S.deadAt!=null ? 'Reserve spent, order gone. The matter stays \u2014 an inert husk. It returns to the flow only when something breaks it down.'
@@ -1103,9 +1103,9 @@
       // colour by structural state (sigma); books (M) drive the readout, not the colour
       const sg=S.sigma; const alive = S.deadAt==null;
       lumMat.color.copy(_husk).lerp(_gold, alive?sg:0.0);
-      lumMat.opacity = 0.12 + 0.5*sg;
+      lumMat.opacity = 0.06 + 0.30*sg;
       memMat.color.copy(_wallHusk).lerp(_gold, alive?clamp01(0.3+0.7*sg):0.15);
-      memMat.opacity = alive ? 0.9 : 0.4;
+      memMat.opacity = alive ? 0.95 : 0.4;
       // heartbeat — pulse rate tracks reserve; none when dead
       const rate = alive ? (0.6+2.2*sg) : 0; S.pulse += dt*rate;
       const beat = 1 + (alive?0.05*sg:0)*Math.sin(S.pulse*2*Math.PI);
@@ -1114,7 +1114,8 @@
       if((Math.floor(t*12)&3)===0) drawCellInfo(); }
 
     function refreshCellBtns(){ const fb=document.getElementById('cellFeed'); if(fb){ const feeding=cellState.fed&&cellState.deadAt==null;
-        fb.textContent = feeding?'Feeding \u2014 cut the flow':'Start feeding'; fb.classList.toggle('on',feeding); fb.style.opacity=cellState.deadAt!=null?0.45:1; } }
+        fb.textContent = cellState.deadAt!=null ? 'Incubator (cell is dead)' : (feeding?'Incubator ON \u2014 cut it':'Restart incubator');
+        fb.classList.toggle('on',feeding); fb.style.opacity=cellState.deadAt!=null?0.45:1; } }
     let cellPanelBuilt=false;
     function buildCellPanel(){ if(cellPanelBuilt) return; cellPanelBuilt=true;
       const fb=document.getElementById('cellFeed'); if(fb) fb.addEventListener('click',()=>cellSetFed(!cellState.fed));
