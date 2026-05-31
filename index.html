@@ -74,7 +74,7 @@
   </div>
   </div>
 
-  <div id="orbHint">Drag to orbit · scroll to zoom · click an element to build it</div>
+  <div id="orbHint">Drag to orbit · scroll to zoom · click to build</div>
   <div id="optBtn" title="Options">&#9881;</div>
   <div id="optPanel">
     <span class="close" id="optClose">&times;</span>
@@ -105,6 +105,7 @@
     <h3>Modes</h3>
     <div class="mode cur" id="modeSB"><span class="nm">Substrate Sandbox</span></div>
     <div class="mode" id="modePT"><span class="nm">Periodic Table</span></div>
+    <div class="mode" id="modeMOL"><span class="nm">Molecules</span></div>
     <div id="optNote">Point at any element and select it &mdash; it builds itself from the substrate, sized to its mass, coloured by its M. On laptop the element slowly turns; <b>drag to orbit it, scroll to zoom</b>. Noble gases wear a closed-shell halo.</div>
   </div>
 
@@ -300,8 +301,8 @@
       y+=8; head('MODES');
       menuRectS=[48,y-26,624,54]; mctx.fillStyle='rgba(212,160,73,0.14)'; rr(48,y-26,624,54,10); mctx.fill(); mctx.fillStyle='#e7eefc'; mctx.font='500 26px system-ui, sans-serif'; mctx.fillText('Substrate Sandbox',72,y+10);
       mctx.fillStyle='#d4a049'; mctx.font='600 18px system-ui, sans-serif'; mctx.textAlign='right'; mctx.fillText('HERE',652,y+10); mctx.textAlign='left'; y+=72;
-      menuRectT=[48,y-26,624,54]; mctx.fillStyle='rgba(74,144,212,0.10)'; rr(48,y-26,624,54,10); mctx.fill(); mctx.fillStyle='#cdd9ef'; mctx.font='500 26px system-ui, sans-serif'; mctx.fillText('Periodic Table',72,y+10);
-      mctx.fillStyle='#9fb3d6'; mctx.font='600 18px system-ui, sans-serif'; mctx.textAlign='right'; mctx.fillText('NEXT',652,y+10); mctx.textAlign='left'; y+=80;
+      menuRectT=[48,y-26,624,54]; mctx.fillStyle='rgba(74,144,212,0.10)'; rr(48,y-26,624,54,10); mctx.fill(); mctx.fillStyle='#cdd9ef'; mctx.font='500 26px system-ui, sans-serif'; mctx.fillText('Periodic Table',72,y+10); y+=72;
+      menuRectM=[48,y-26,624,54]; mctx.fillStyle='rgba(74,144,212,0.10)'; rr(48,y-26,624,54,10); mctx.fill(); mctx.fillStyle='#cdd9ef'; mctx.font='500 26px system-ui, sans-serif'; mctx.fillText('Molecules',72,y+10); y+=80;
       mctx.fillStyle='#5f7299'; mctx.font='300 20px system-ui, sans-serif'; mctx.fillText('Press A / X to close',48,892);
       menuTex.needsUpdate=true; }
     drawMenu();
@@ -319,7 +320,7 @@
     addEventListener('pointerup',()=>dragging=false);
     dom.addEventListener('wheel',e=>{ if(renderer.xr.isPresenting) return; if(orbitOn){ orbDist=Math.max(0.9,Math.min(8.0, orbDist + e.deltaY*0.01)); applyDesktopCam(); return; } for(const b of pool){ if(b.grabbedBy==='desktop'){ b.grabDist=Math.max(0.5,Math.min(30.0, b.grabDist + e.deltaY*0.004)); } } },{passive:true});
     addEventListener('pointermove',e=>{ mouseNDC.x=(e.clientX/innerWidth)*2-1; mouseNDC.y=-(e.clientY/innerHeight)*2+1; if(!dragging||renderer.xr.isPresenting) return; dragMoved=true; if(orbitOn){ orbYaw-=(e.clientX-pxv)*0.006; orbPitch+=(e.clientY-pyv)*0.006; orbPitch=Math.max(-0.45,Math.min(1.25,orbPitch)); } else { dYaw-=(e.clientX-pxv)*0.005; dPitch-=(e.clientY-pyv)*0.005; dPitch=Math.max(-1.3,Math.min(0.6,dPitch)); } pxv=e.clientX; pyv=e.clientY; applyDesktopCam(); });
-    dom.addEventListener('click',e=>{ if(renderer.xr.isPresenting||mode!=='table'||!hoverZ||dragMoved) return; const o=ELEM.find(x=>x[0]===hoverZ); if(o) showElement(o); });
+    dom.addEventListener('click',e=>{ if(renderer.xr.isPresenting||dragMoved) return; if(mode==='table'&&hoverZ){ const o=ELEM.find(x=>x[0]===hoverZ); if(o) showElement(o); } else if(mode==='mol'&&molHover>=0){ buildMolecule(molHover); } });
     addEventListener('keydown',e=>{ keys[e.code]=true;
       if(e.code==='Space'){ e.preventDefault(); if(!renderer.xr.isPresenting && !desktopActive && mode==='sandbox'){ poseOf('desktop',_o,_d); intersectSea(_o,_d,_spot); desktopActive=spawnBody('desktop',_spot); desktopLast=desktopActive; } }
       if(e.code==='KeyC'){ let tg=desktopActive||((desktopLast&&!desktopLast.free&&!desktopLast.held)?desktopLast:null); if(tg&&!tg.held){ commitBody(tg); desktopActive=null; } }
@@ -447,7 +448,7 @@
 ];
     const ray=new THREE.Raycaster(); const mouseNDC=new THREE.Vector2(2,2);
     let mode='sandbox', hoverZ=0, selZ=0, showcase=null;
-    var menuRectS=[0,0,0,0], menuRectT=[0,0,0,0];
+    var menuRectS=[0,0,0,0], menuRectT=[0,0,0,0], menuRectM=[0,0,0,0];
     function mcol(Mn){ const a=[46,116,173], b=[236,183,78]; return 'rgb('+((a[0]+(b[0]-a[0])*Mn)|0)+','+((a[1]+(b[1]-a[1])*Mn)|0)+','+((a[2]+(b[2]-a[2])*Mn)|0)+')'; }
     function mcolRGB(Mn){ return [(46+(236-46)*Mn)/255,(116+(183-116)*Mn)/255,(173+(78-173)*Mn)/255]; }
     function rrect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
@@ -503,9 +504,108 @@
       const mc=mcolRGB(o[10]); b.u.uHeld.value.setRGB(mc[0],mc[1],mc[2]); b.core.material.color.setRGB(0.6+0.4*o[10],0.7+0.2*o[10],0.95-0.4*o[10]); b.noble=(o[11]==='noble_gas');
       orbFocus.copy(b.center);
       showcase=b; selZ=o[0]; drawInfo(o); infoPlane.visible=true; drawTable(); }
-    function setMode(m){ if(m==='table'){ mode='table'; clearSandboxBodies(); selZ=0; hoverZ=0; infoPlane.visible=false; tableGroup.visible=true; drawTable();
-        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=2.7; orbFocus.set(0,1.3,-1.95); applyDesktopCam(); } }
-      else { mode='sandbox'; tableGroup.visible=false; infoPlane.visible=false; if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); } const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', mode==='table' && !renderer.xr.isPresenting); }
+
+    // ================= MOLECULES MODE =================
+    const MOL=[
+{n:"Water",f:"H2O",note:"Oxygen offers 2 coupling positions in a bent ~104.5° geometry; the substrate's lowest-strain closure for two H.",a:"O,0,0,0,0.891;H,0.411,-0.318,0,0;H,-0.411,-0.318,0,0",b:"0,1,1;0,2,1"},
+{n:"Methane",f:"CH4",note:"Carbon's four coupling positions at the tetrahedral 109.5° — the substrate's natural 4-coordinate closure.",a:"C,0,0,0,0.846;H,0.3,0.3,0.3,0;H,0.3,-0.3,-0.3,0;H,-0.3,0.3,-0.3,0;H,-0.3,-0.3,0.3,0",b:"0,1,1;0,2,1;0,3,1;0,4,1"},
+{n:"Ammonia",f:"NH3",note:"Nitrogen: 3 coupling positions plus a lone pair — pyramidal, not flat. The lone pair is part of the closure.",a:"N,0,0.094,0,0.819;H,0.42,-0.153,0,0;H,-0.21,-0.153,0.364,0;H,-0.21,-0.153,-0.364,0",b:"0,1,1;0,2,1;0,3,1"},
+{n:"Carbon dioxide",f:"CO2",note:"O=C=O. Two double bonds, linear 180°. Each double bond is two coupling positions continuing through.",a:"C,0,0,0,0.846;O,0.624,0,0,0.891;O,-0.624,0,0,0.891",b:"0,1,2;0,2,2"},
+{n:"Benzene",f:"C6H6",note:"Six carbons, one delocalised ring — the aromatic closure. Coupling is shared around the whole loop, not pinned to pairs.",a:"C,0.702,0,0,0.846;C,0.351,0.608,0,0.846;C,-0.351,0.608,0,0.846;C,-0.702,0,0,0.846;C,-0.351,-0.608,0,0.846;C,0.351,-0.608,0,0.846;H,1.196,0,0,0;H,0.598,1.036,0,0;H,-0.598,1.036,0,0;H,-1.196,0,0,0;H,-0.598,-1.036,0,0;H,0.598,-1.036,0,0",b:"0,1,15;0,6,1;1,2,15;1,7,1;2,3,15;2,8,1;3,4,15;3,9,1;4,5,15;4,10,1;5,0,15;5,11,1"},
+{n:"Oxygen",f:"O2",note:"A double bond closing two oxygen closures into one. What you breathe.",a:"O,-0.312,0,0,0.891;O,0.312,0,0,0.891",b:"0,1,2"},
+];
+    MOL.forEach(function(m){ m.atoms=m.a.split(';').map(function(t){var p=t.split(','); return {sym:p[0],x:+p[1],y:+p[2],z:+p[3],mn:+p[4]};});
+      m.bonds=m.b?m.b.split(';').map(function(t){var p=t.split(','); return {i:+p[0],j:+p[1],o:+p[2]};}):[]; });
+    const molCenter=new THREE.Vector3(0,1.3,-1.95);
+    let molSel=-1, molHover=-1, molSpin=0, curMol=null;
+    const molGroup=new THREE.Group(); molGroup.visible=false; scene.add(molGroup);
+
+    // dedicated atom-closures (separate from the body pool)
+    const MATOMS=14; const matom=[];
+    for(let i=0;i<MATOMS;i++){ const mt=makeBodyMat(); const p=new THREE.Points(cGeo,mt); p.visible=false; p.frustumCulled=false; scene.add(p);
+      matom.push({pts:p,u:mt.uniforms,local:new THREE.Vector3(),wc:new THREE.Vector3(),form:0,radius:0.14,wave:Math.random()*9,spin:Math.random()*9,active:false}); }
+    // coupling corridors: one point cloud, points spread along each bond
+    const MB_MAX=20, MPPB=10; const mbPos=new Float32Array(MB_MAX*MPPB*3); const mbGeo=new THREE.BufferGeometry(); mbGeo.setAttribute('position',new THREE.BufferAttribute(mbPos,3));
+    const mbSeed=new Float32Array(MB_MAX*MPPB); for(let i=0;i<mbSeed.length;i++) mbSeed[i]=Math.random();
+    const mbPts=new THREE.Points(mbGeo,new THREE.PointsMaterial({map:radialTexture(),color:0xffe2a6,size:0.055,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true})); mbPts.frustumCulled=false; mbPts.visible=false; scene.add(mbPts);
+
+    // shelf plane
+    const MSW=1500,MSH=560; const mscv=document.createElement('canvas'); mscv.width=MSW; mscv.height=MSH; const msctx=mscv.getContext('2d');
+    const mstex=new THREE.CanvasTexture(mscv);
+    const molShelf=new THREE.Mesh(new THREE.PlaneGeometry(2.2,2.2*MSH/MSW), new THREE.MeshBasicMaterial({map:mstex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
+    molShelf.renderOrder=15; molShelf.position.set(0,2.05,-2.85); molGroup.add(molShelf);
+    const mcw=346,mch=150,mpadx=24,mpady=22,mx0=30,my0=96, MCOLS=4;
+    const molCells=MOL.map(function(m,idx){ const col=idx%MCOLS, row=(idx/MCOLS)|0; return {idx:idx, x:mx0+col*(mcw+mpadx), y:my0+row*(mch+mpady)}; });
+    function molAtUV(u,v){ const px=u*MSW, py=(1-v)*MSH; for(const c of molCells){ if(px>=c.x&&px<=c.x+mcw&&py>=c.y&&py<=c.y+mch) return c.idx; } return -1; }
+    function molAvgMn(m){ let s=0; for(const a of m.atoms) s+=a.mn; return s/m.atoms.length; }
+    function drawMolShelf(){ msctx.clearRect(0,0,MSW,MSH);
+      msctx.textAlign='left'; msctx.fillStyle='#e7eefc'; msctx.font='400 44px Georgia, serif'; msctx.fillText('Molecules',mx0,56);
+      msctx.fillStyle='#7e93b5'; msctx.font='300 24px system-ui, sans-serif'; msctx.fillText('atom-closures coupling into one larger closure',mx0+250,52);
+      for(const c of molCells){ const m=MOL[c.idx], sel=c.idx===molSel, hov=c.idx===molHover;
+        msctx.globalAlpha=sel?0.9:(hov?0.6:0.3); msctx.fillStyle=mcol(molAvgMn(m)); rrect(msctx,c.x,c.y,mcw,mch,12); msctx.fill(); msctx.globalAlpha=1;
+        msctx.strokeStyle=sel?'#ecb74e':(hov?'rgba(236,183,78,0.8)':'rgba(160,180,210,0.22)'); msctx.lineWidth=sel?3.5:1.4; rrect(msctx,c.x,c.y,mcw,mch,12); msctx.stroke();
+        msctx.fillStyle='#0a0e16'; msctx.textAlign='left'; msctx.font='600 38px system-ui, sans-serif'; msctx.fillText(m.n,c.x+22,c.y+58);
+        msctx.font='500 30px system-ui, sans-serif'; msctx.fillStyle='rgba(10,14,22,0.82)'; msctx.fillText(m.f,c.x+22,c.y+104); }
+      mstex.needsUpdate=true; }
+
+    // molecule info plane (reuse the info-panel look)
+    const MIW=760,MIH=900; const micv=document.createElement('canvas'); micv.width=MIW; micv.height=MIH; const mictx=micv.getContext('2d');
+    const mitex=new THREE.CanvasTexture(micv);
+    const molInfo=new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95*MIH/MIW), new THREE.MeshBasicMaterial({map:mitex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
+    molInfo.renderOrder=16; molInfo.position.set(1.85,1.4,-2.15); molInfo.rotation.y=-0.4; molInfo.visible=false; molGroup.add(molInfo);
+    function drawMolInfo(m){ mictx.clearRect(0,0,MIW,MIH);
+      mictx.fillStyle='rgba(9,12,20,0.96)'; rrect(mictx,6,6,MIW-12,MIH-12,20); mictx.fill(); mictx.strokeStyle='rgba(212,160,73,0.4)'; mictx.lineWidth=2; rrect(mictx,6,6,MIW-12,MIH-12,20); mictx.stroke();
+      mictx.textAlign='left'; mictx.fillStyle='#e7eefc'; mictx.font='400 54px Georgia, serif'; mictx.fillText(m.n,46,96);
+      mictx.fillStyle=mcol(molAvgMn(m)); mictx.font='600 40px system-ui, sans-serif'; mictx.fillText(m.f,46,150);
+      let y=220; mictx.fillStyle='#9fb3d6'; mictx.font='600 26px system-ui, sans-serif'; mictx.fillText('Atoms ('+m.atoms.length+')',46,y); y+=10;
+      const counts={}; m.atoms.forEach(a=>counts[a.sym]=(counts[a.sym]||0)+1);
+      y+=40; mictx.font='400 28px system-ui, sans-serif'; mictx.fillStyle='#cdd9ef';
+      mictx.fillText(Object.keys(counts).map(k=>k+' \u00d7'+counts[k]).join('    '),46,y);
+      y+=60; mictx.fillStyle='#9fb3d6'; mictx.font='600 26px system-ui, sans-serif'; mictx.fillText('Bonds ('+m.bonds.length+')',46,y);
+      const bn={1:'single',2:'double',3:'triple',15:'aromatic'}; const bc={}; m.bonds.forEach(b=>bc[b.o]=(bc[b.o]||0)+1);
+      y+=46; mictx.font='400 26px system-ui, sans-serif'; mictx.fillStyle='#cdd9ef'; mictx.fillText(Object.keys(bc).map(k=>bc[k]+' '+bn[k]).join('    '),46,y);
+      y+=70; mictx.fillStyle='#7fb27f'; mictx.font='600 26px system-ui, sans-serif'; mictx.fillText('\u2713 coupling positions satisfied \u2014 closure holds',46,y);
+      y+=56; mictx.fillStyle='#9fb3d6'; mictx.font='300 28px system-ui, sans-serif';
+      const words=(m.note||'').split(' '); let line='',yy=y; const maxw=MIW-96;
+      for(const w of words){ const test=line?line+' '+w:w; if(mictx.measureText(test).width>maxw){ mictx.fillText(line,46,yy); line=w; yy+=40; } else line=test; } mictx.fillText(line,46,yy);
+      mitex.needsUpdate=true; }
+
+    function buildMolecule(idx){ if(idx<0||idx>=MOL.length) return; curMol=MOL[idx]; molSel=idx; molSpin=0;
+      for(const a of matom){ a.active=false; a.pts.visible=false; }
+      const at=curMol.atoms;
+      for(let i=0;i<at.length && i<MATOMS;i++){ const a=matom[i]; a.active=true; a.local.set(at[i].x,at[i].y,at[i].z); a.form=0;
+        a.radius=(at[i].sym==='H')?0.10:0.16; const c=mcolRGB(at[i].mn); a.u.uHeld.value.setRGB(c[0],c[1],c[2]); a.u.uDissolved.value.set('#2e74ad'); a.u.uR.value=a.radius; a.pts.visible=true; }
+      drawMolInfo(curMol); molInfo.visible=true; drawMolShelf(); }
+    if(typeof window!=='undefined'){ window.__eoeBuildMol=buildMolecule; }
+    function updateMolecule(dt,t){ if(!curMol){ mbPts.visible=false; return; }
+      molSpin+=dt*0.32; const cs=Math.cos(molSpin), sn=Math.sin(molSpin), tilt=0.3, ct=Math.cos(tilt), st=Math.sin(tilt);
+      for(const a of matom){ if(!a.active) continue;
+        a.form+=dt*feedSpeed*(0.5+1.4*a.form*a.form); a.form=clamp01(a.form);
+        const lx=a.local.x, ly=a.local.y, lz=a.local.z; const rx=lx*cs+lz*sn, rzc=-lx*sn+lz*cs; const ry2=ly*ct-rzc*st, rz2=ly*st+rzc*ct;
+        a.wc.set(molCenter.x+rx, molCenter.y+ry2, molCenter.z+rz2);
+        const wE=smoothstep(0.22,0.46,a.form), wB=smoothstep(0.6,1.0,a.form), tw=0.62*smoothstep(0.25,0.55,a.form);
+        a.wave+=lerp(0,2.0,smoothstep(0.45,0.75,a.form))*dt; a.spin+=lerp(0,1.0,smoothstep(0.7,0.95,a.form))*dt;
+        sm4.makeRotationAxis(spinAxis,a.spin); sm3.setFromMatrix4(sm4);
+        const u=a.u; u.uForm.value=a.form; u.uwEight.value=wE; u.uwBall.value=wB; u.uTwistZ.value=tw; u.uEightHi.value=wE*(1.0-wB); u.uWave.value=a.wave; u.uSpinMat.value.copy(sm3); u.uR.value=a.radius;
+        u.uCenter.value.set(a.wc.x, a.wc.y-a.radius*1.15*a.form, a.wc.z); }
+      let pi=0; const bds=curMol.bonds;
+      for(let bi=0; bi<bds.length && pi<MB_MAX; bi++){ const b=bds[bi]; const A=matom[b.i], B=matom[b.j]; if(!A||!B||!A.active||!B.active) continue;
+        for(let k=0;k<MPPB;k++){ const idx=pi*MPPB+k; const uu=(k+0.5)/MPPB; const jq=(mbSeed[idx]-0.5)*0.045*(b.o>=2?1.7:1.0);
+          mbPos[idx*3]=lerp(A.wc.x,B.wc.x,uu)+jq; mbPos[idx*3+1]=lerp(A.wc.y,B.wc.y,uu)+jq*0.5; mbPos[idx*3+2]=lerp(A.wc.z,B.wc.z,uu)+((mbSeed[idx]*7.0)%1.0-0.5)*0.045; }
+        pi++; }
+      for(let k=pi*MPPB;k<MB_MAX*MPPB;k++){ mbPos[k*3]=mbPos[k*3+1]=mbPos[k*3+2]=99999; }
+      mbGeo.attributes.position.needsUpdate=true; mbPts.visible=true;
+      mbPts.material.opacity=0.55*smoothstep(0.2,0.8, matom[0]?matom[0].form:0); }
+
+    function setMode(m){ mode=m;
+      const tbl=(m==='table'), mol=(m==='mol');
+      tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol;
+      if(!tbl){ selZ=0; hoverZ=0; }
+      if(!mol){ molSel=-1; molHover=-1; curMol=null; for(const a of matom){ a.active=false; a.pts.visible=false; } mbPts.visible=false; molInfo.visible=false; }
+      if(tbl||mol){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
+        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=mol?3.0:2.7; orbFocus.copy(mol?molCenter:new THREE.Vector3(0,1.3,-1.95)); applyDesktopCam(); } }
+      else { if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); }
+      const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol) && !renderer.xr.isPresenting); }
     if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; }
 
     function interactBodies(dt){
@@ -552,10 +652,11 @@
           const trig=!!(gp.buttons[0]&&gp.buttons[0].pressed); const grip=!!(gp.buttons[1]&&gp.buttons[1].pressed); const ud=c.userData;
           const menuBtn=!!(gp.buttons[4]&&gp.buttons[4].pressed); if(menuBtn&&!ud.menuPrev) toggleMenu(); ud.menuPrev=menuBtn;
           if(menuVisible){ poseOf(c,_o,_d); ray.set(_o,_d.clone().normalize()); const mh=ray.intersectObject(menuPanel,false);
-            if(mh.length&&mh[0].uv){ const px=mh[0].uv.x*720, py=(1-mh[0].uv.y)*920; let pick=inRect(px,py,menuRectS)?'sandbox':(inRect(px,py,menuRectT)?'table':null);
+            if(mh.length&&mh[0].uv){ const px=mh[0].uv.x*720, py=(1-mh[0].uv.y)*920; let pick=inRect(px,py,menuRectS)?'sandbox':(inRect(px,py,menuRectT)?'table':(inRect(px,py,menuRectM)?'mol':null));
               if(trig&&!ud.trigPrev&&pick){ setMode(pick); menuVisible=false; menuPanel.visible=false; } }
             ud.trigPrev=trig; ud.gripPrev=grip; continue; }
           if(mode==='table'){ if(trig&&!ud.trigPrev&&hoverZ){ const o=ELEM.find(x=>x[0]===hoverZ); if(o) showElement(o); } ud.trigPrev=trig; ud.gripPrev=grip; continue; }
+          if(mode==='mol'){ if(trig&&!ud.trigPrev&&molHover>=0){ buildMolecule(molHover); } ud.trigPrev=trig; ud.gripPrev=grip; continue; }
           if(trig&&!ud.trigPrev){ poseOf(c,_o,_d); intersectSea(_o,_d,_spot); ud.active=spawnBody(c,_spot); ud.last=ud.active; }
           if(!trig&&ud.trigPrev){ toPending(ud.active); ud.active=null; }
           ud.trigPrev=trig;
@@ -574,6 +675,13 @@
         const hs=ray.intersectObject(tablePlane,false);
         if(hs.length&&hs[0].uv){ const o=cellAtUV(hs[0].uv.x,hs[0].uv.y); hz=o?o[0]:0; }
         if(hz!==hoverZ){ hoverZ=hz; drawTable(); }
+      }
+      else if(mode==='mol'){ let mh=-1;
+        if(renderer.xr.isPresenting && controllers[0]){ poseOf(controllers[0],_o,_d); ray.set(_o,_d.clone().normalize()); }
+        else ray.setFromCamera(mouseNDC,camera);
+        const hs=ray.intersectObject(molShelf,false);
+        if(hs.length&&hs[0].uv){ mh=molAtUV(hs[0].uv.x,hs[0].uv.y); }
+        if(mh!==molHover){ molHover=mh; drawMolShelf(); }
       }
       interactBodies(dt);
       let heldCount=0, activeForm=0, activeM=-0.95;
@@ -624,6 +732,7 @@
       camera.getWorldPosition(_o); camera.getWorldDirection(_d); hudSprite.position.set(_o.x+_d.x*1.6, _o.y+_d.y*1.6-0.45, _o.z+_d.z*1.6);
       hudSprite.material.opacity=renderer.xr.isPresenting?0.5:0.0;
 
+      if(mode==='mol') updateMolecule(dt,t);
       drawBonds(t);
       if(mode==='table' && showcase && !showcase.free && showcase.noble){ nobleHalo.visible=true; nobleHalo.position.set(showcase.center.x, showcase.center.y+showcase.radius*1.15*showcase.form, showcase.center.z); const hs=showcase.radius*4.3; nobleHalo.scale.set(hs,hs,1); nobleHalo.material.opacity=0.55*smoothstep(0.55,1.0,showcase.form); }
       else nobleHalo.visible=false;
@@ -640,6 +749,7 @@
     c.addEventListener('click',()=>p.classList.remove('open'));
     function setCur(el){ document.querySelectorAll('#optPanel .mode').forEach(m=>m.classList.remove('cur')); if(el) el.classList.add('cur'); }
     pt.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('table'); setCur(pt); p.classList.remove('open'); });
+    const ml=document.getElementById('modeMOL'); ml.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('mol'); setCur(ml); p.classList.remove('open'); });
     sb.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('sandbox'); setCur(sb); p.classList.remove('open'); });
   })();
   </script>
