@@ -65,6 +65,8 @@
   #optPanel .spd{flex:1;text-align:center;padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;color:#9fb3d6;background:rgba(74,144,212,0.08);border:1px solid rgba(74,144,212,0.16);transition:all .2s;}
   #optPanel .spd:hover{border-color:rgba(212,160,73,0.4);}
   #optPanel .spd.on{background:rgba(212,160,73,0.16);border-color:rgba(212,160,73,0.5);color:#e7eefc;}
+  #optPanel input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:3px;background:rgba(74,144,212,0.3);outline:none;}
+  #optPanel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;border:0;}
   #optNote{font-size:12px;color:#5f7299;margin-top:10px;line-height:1.6;}
 </style>
 </head>
@@ -111,6 +113,9 @@
       <div class="spd" data-v="1.8">Fast</div>
     </div>
     <div style="font-size:12px;color:#5f7299;margin-top:8px;line-height:1.6;">Bodies start slow so you see the twist, then accelerate. In VR, push the thumbstick up while feeding to speed up the one you're making.</div>
+    <h3>Settings</h3>
+    <div class="ctrl" style="align-items:center;"><b>Cosmos</b><input id="cosmosSlider" type="range" min="0" max="150" value="100" style="flex:1;"><span id="cosmosVal" style="font-size:12px;color:#e7eefc;min-width:40px;text-align:right;">100%</span></div>
+    <div style="font-size:12px;color:#5f7299;margin-top:4px;line-height:1.6;">How much nebula, stars, and colour fill the sky behind the substrate. Slide to 0 for pure black; the substrate floor stays.</div>
     <h3>Modes</h3>
     <div class="mode cur" id="modeSB"><span class="nm">Substrate Sandbox</span></div>
     <div class="mode" id="modePT"><span class="nm">Periodic Table</span></div>
@@ -190,7 +195,7 @@
     const ocean=new THREE.Points(oGeo,oMat); ocean.frustumCulled=false; scene.add(ocean);
 
     // ============ COSMIC BACKDROP — JWST-style star-forming nebula (substrate condensing into closures) ============
-    const cwGlows=[]; const cosmicWeb=new THREE.Group(); scene.add(cosmicWeb);
+    let cosmosLevel=1.0; const cwGlows=[], cwMul=[], cwOpac=[]; const cosmicWeb=new THREE.Group(); scene.add(cosmicWeb);
     (function(){
       const rnd=Math.random;
       function dotTex(soft){ const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d'); const g=x.createRadialGradient(32,32,0,32,32,32);
@@ -215,7 +220,7 @@
       const stars=[]; for(let i=0;i<4200;i++){ const u=rnd()*2-1, th=rnd()*6.2832, r=95+rnd()*110, sx=Math.sqrt(Math.max(0,1-u*u)); let y=u*r; if(y<-40) y=-40+rnd()*20;
         const t=rnd(); const tint=t<0.7?[0.92,0.95,1.0]:(t<0.88?[1.0,0.9,0.72]:[0.78,0.86,1.0]); const br=0.4+Math.pow(rnd(),2.2)*1.3; const big=Math.pow(rnd(),6);
         stars.push({x:sx*Math.cos(th)*r,y:y,z:sx*Math.sin(th)*r,c:[tint[0]*br,tint[1]*br,tint[2]*br],s:170+big*900}); }
-      cosmicWeb.add(new THREE.Points(fillPoints(stars), ptShader(dotTex(false),1.0)));
+      { const m=ptShader(dotTex(false),1.0); cwMul.push({u:m.uniforms,base:1.0}); cosmicWeb.add(new THREE.Points(fillPoints(stars), m)); }
 
       // billowing nebula clouds (warm = matter condensing/held, teal = substrate still gas) + ambient washes
       const warm=[1.0,0.55,0.24], teal=[0.24,0.70,0.78], mag=[0.72,0.30,0.58]; const neb=[];
@@ -233,13 +238,13 @@
       cloud(dirv(-0.2,0.3,0.95,150), 40, 380, 0.45, 0.9);
       cloud(dirv( 0.5,0.45,-0.8,158), 46, 480, 0.25, 0.9);
       cloud(dirv(-0.9,0.15,0.2,160), 42, 420, 0.55, 0.95);
-      cosmicWeb.add(new THREE.Points(fillPoints(neb), ptShader(dotTex(true),1.35)));
+      { const m=ptShader(dotTex(true),1.35); cwMul.push({u:m.uniforms,base:1.35}); cosmicWeb.add(new THREE.Points(fillPoints(neb), m)); }
       // ambient color washes — guarantee color in every direction
       const washTex=dotTex(true);
       const WASH=[[0x2f6f9a,210,0.17],[0xc06a2c,205,0.17],[0x6a2f7a,200,0.14],[0x1f7a70,195,0.15],[0x8a3a5a,185,0.13]];
       for(let i=0;i<WASH.length;i++){ const an=i*1.25+0.3, el=(rnd()*0.7-0.1), cy=Math.sin(el), cxz=Math.cos(el);
         const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:washTex,color:WASH[i][0],transparent:true,opacity:WASH[i][2],depthWrite:false,blending:THREE.AdditiveBlending}));
-        sp.position.set(Math.cos(an)*cxz*150, cy*120+20, Math.sin(an)*cxz*150); sp.scale.set(WASH[i][1],WASH[i][1],1); cosmicWeb.add(sp); }
+        sp.position.set(Math.cos(an)*cxz*150, cy*120+20, Math.sin(an)*cxz*150); sp.scale.set(WASH[i][1],WASH[i][1],1); cwOpac.push({m:sp.material,base:WASH[i][2]}); cosmicWeb.add(sp); }
 
       // bright JWST diffraction-spike stars
       const stex=spikeTex();
@@ -247,8 +252,10 @@
         const t=rnd(); const col=t<0.6?0xfff2da:(t<0.85?0xffd49a:0xbcd2ff);
         const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:stex,color:col,transparent:true,opacity:0.55+rnd()*0.4,depthWrite:false,blending:THREE.AdditiveBlending}));
         sp.position.set(sx*Math.cos(th)*r,y,sx*Math.sin(th)*r); const sc=5+Math.pow(rnd(),2)*16; sp.scale.set(sc,sc,1);
-        if(rnd()<0.4){ sp.userData.tw=rnd()*9; sp.userData.b=sp.material.opacity; cwGlows.push(sp); } cosmicWeb.add(sp); }
+        if(rnd()<0.4){ sp.userData.tw=rnd()*9; sp.userData.b=sp.material.opacity; cwGlows.push(sp); } else { cwOpac.push({m:sp.material,base:sp.material.opacity}); } cosmicWeb.add(sp); }
     })();
+    function setCosmos(level){ cosmosLevel=level; cosmicWeb.visible=level>0.001; for(let i=0;i<cwMul.length;i++) cwMul[i].u.uMul.value=cwMul[i].base*level; for(let i=0;i<cwOpac.length;i++) cwOpac[i].m.opacity=cwOpac[i].base*level; }
+    if(typeof window!=="undefined"){ window.__eoeSetCosmos=setCosmos; }
 
     // ================= MATTER (shared geometry, pool of bodies) =================
     const cDisk=new Float32Array(PPB*3), cPhase=new Float32Array(PPB), cTube=new Float32Array(PPB*3), cSeed=new Float32Array(PPB);
@@ -738,7 +745,7 @@
     const clock=new THREE.Clock();
     function tick(){
       const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime; desktopMove(dt); oU.uTime.value=t;
-      if(cosmicWeb){ cosmicWeb.rotation.y+=dt*0.004; for(let i=0;i<cwGlows.length;i++){ const g=cwGlows[i]; g.material.opacity=g.userData.b*(0.7+0.3*Math.sin(t*0.6+g.userData.tw)); } }
+      if(cosmicWeb){ cosmicWeb.rotation.y+=dt*0.004; for(let i=0;i<cwGlows.length;i++){ const g=cwGlows[i]; g.material.opacity=cosmosLevel*g.userData.b*(0.7+0.3*Math.sin(t*0.6+g.userData.tw)); } }
 
       if(renderer.xr.isPresenting && xrSession){ const srcs=xrSession.inputSources;
         for(let i=0;i<srcs.length && i<controllers.length;i++){ const gp=srcs[i].gamepad; const c=controllers[i]; if(!gp||!c) continue;
@@ -843,6 +850,8 @@
     pt.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('table'); setCur(pt); p.classList.remove('open'); });
     const ml=document.getElementById('modeMOL'); ml.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('mol'); setCur(ml); p.classList.remove('open'); });
     sb.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('sandbox'); setCur(sb); p.classList.remove('open'); });
+    const cosS=document.getElementById('cosmosSlider'), cosV=document.getElementById('cosmosVal');
+    if(cosS){ cosS.addEventListener('input',()=>{ cosV.textContent=cosS.value+'%'; if(window.__eoeSetCosmos) window.__eoeSetCosmos(+cosS.value/100); }); }
   })();
   </script>
 </body>
