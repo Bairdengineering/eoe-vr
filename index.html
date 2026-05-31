@@ -115,7 +115,7 @@
     <div style="font-size:12px;color:#5f7299;margin-top:8px;line-height:1.6;">Bodies start slow so you see the twist, then accelerate. In VR, push the thumbstick up while feeding to speed up the one you're making.</div>
     <h3>Settings</h3>
     <div class="ctrl" style="align-items:center;"><b>Cosmos</b><input id="cosmosSlider" type="range" min="0" max="150" value="100" style="flex:1;"><span id="cosmosVal" style="font-size:12px;color:#e7eefc;min-width:40px;text-align:right;">100%</span></div>
-    <div style="font-size:12px;color:#5f7299;margin-top:4px;line-height:1.6;">How much nebula, stars, and colour fill the sky behind the substrate. Slide to 0 for pure black; the substrate floor stays.</div>
+    <div style="font-size:12px;color:#5f7299;margin-top:4px;line-height:1.6;">Brightness of the world around you &mdash; a live substrate field running M = &chi;s &minus; &lambda; in every cell, gold where closures hold, blue where matter dissolves. Slide to 0 to hide it.</div>
     <h3>Modes</h3>
     <div class="mode cur" id="modeSB"><span class="nm">Substrate Sandbox</span></div>
     <div class="mode" id="modePT"><span class="nm">Periodic Table</span></div>
@@ -222,29 +222,7 @@
         stars.push({x:sx*Math.cos(th)*r,y:y,z:sx*Math.sin(th)*r,c:[tint[0]*br,tint[1]*br,tint[2]*br],s:170+big*900}); }
       { const m=ptShader(dotTex(false),1.0); cwMul.push({u:m.uniforms,base:1.0}); cosmicWeb.add(new THREE.Points(fillPoints(stars), m)); }
 
-      // billowing nebula clouds (warm = matter condensing/held, teal = substrate still gas) + ambient washes
-      const warm=[1.0,0.55,0.24], teal=[0.24,0.70,0.78], mag=[0.72,0.30,0.58]; const neb=[];
-      function dirv(x,y,z,r){ return new THREE.Vector3(x,y,z).normalize().multiplyScalar(r); }
-      function cloud(cen, span, count, warmBias, boost){ const subs=5+(rnd()*4|0);
-        const up=Math.abs(cen.y)<cen.length()*0.9?new THREE.Vector3(0,1,0):new THREE.Vector3(1,0,0);
-        const tx=new THREE.Vector3().crossVectors(cen,up).normalize(); const ty=new THREE.Vector3().crossVectors(cen,tx).normalize();
-        for(let sIdx=0;sIdx<subs;sIdx++){ const so=tx.clone().multiplyScalar((rnd()-0.5)*span).add(ty.clone().multiplyScalar((rnd()-0.5)*span)); const sc=cen.clone().add(so);
-          const k=(count/subs)|0; for(let j=0;j<k;j++){ const pj=sc.clone().add(new THREE.Vector3((rnd()-0.5)*span*0.6,(rnd()-0.5)*span*0.6,(rnd()-0.5)*span*0.6));
-            const tt=clamp01((pj.y-(cen.y-span))/(2*span)); let col=mix3(warm,teal,clamp01(tt*0.9+(0.4-warmBias))); if(rnd()<0.07) col=mag;
-            const edge=so.length()/span; const br=(0.62-edge*0.25)*(0.5+rnd()*0.8)*boost; neb.push({x:pj.x,y:pj.y,z:pj.z,c:[col[0]*br,col[1]*br,col[2]*br],s:1100+rnd()*3200}); } } }
-      cloud(dirv(-0.7,0.35,-0.6,150), 64, 1100, 0.6, 1.05);   // dominant warm wall
-      cloud(dirv( 0.85,0.2,0.1,160), 48, 520, 0.3, 0.95);
-      cloud(dirv( 0.1,0.55,0.95,155), 44, 460, 0.2, 0.9);
-      cloud(dirv(-0.2,0.3,0.95,150), 40, 380, 0.45, 0.9);
-      cloud(dirv( 0.5,0.45,-0.8,158), 46, 480, 0.25, 0.9);
-      cloud(dirv(-0.9,0.15,0.2,160), 42, 420, 0.55, 0.95);
-      { const m=ptShader(dotTex(true),1.35); cwMul.push({u:m.uniforms,base:1.35}); cosmicWeb.add(new THREE.Points(fillPoints(neb), m)); }
-      // ambient color washes — guarantee color in every direction
-      const washTex=dotTex(true);
-      const WASH=[[0x2f6f9a,210,0.17],[0xc06a2c,205,0.17],[0x6a2f7a,200,0.14],[0x1f7a70,195,0.15],[0x8a3a5a,185,0.13]];
-      for(let i=0;i<WASH.length;i++){ const an=i*1.25+0.3, el=(rnd()*0.7-0.1), cy=Math.sin(el), cxz=Math.cos(el);
-        const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:washTex,color:WASH[i][0],transparent:true,opacity:WASH[i][2],depthWrite:false,blending:THREE.AdditiveBlending}));
-        sp.position.set(Math.cos(an)*cxz*150, cy*120+20, Math.sin(an)*cxz*150); sp.scale.set(WASH[i][1],WASH[i][1],1); cwOpac.push({m:sp.material,base:WASH[i][2]}); cosmicWeb.add(sp); }
+      // (procedural nebula + washes removed — replaced by the live substrate field below)
 
       // bright JWST diffraction-spike stars
       const stex=spikeTex();
@@ -254,7 +232,53 @@
         sp.position.set(sx*Math.cos(th)*r,y,sx*Math.sin(th)*r); const sc=5+Math.pow(rnd(),2)*16; sp.scale.set(sc,sc,1);
         if(rnd()<0.4){ sp.userData.tw=rnd()*9; sp.userData.b=sp.material.opacity; cwGlows.push(sp); } else { cwOpac.push({m:sp.material,base:sp.material.opacity}); } cosmicWeb.add(sp); }
     })();
-    function setCosmos(level){ cosmosLevel=level; cosmicWeb.visible=level>0.001; for(let i=0;i<cwMul.length;i++) cwMul[i].u.uMul.value=cwMul[i].base*level; for(let i=0;i<cwOpac.length;i++) cwOpac[i].m.opacity=cwOpac[i].base*level; }
+    // ============ LIVE SUBSTRATE FIELD — M = χs − λ evaluated per cell, every frame ============
+    // Nothing here is hand-painted: each point's colour is mcolRGB of the M its own cell computes,
+    // the same gold↔blue ramp the molecules use. The field evolves under the exact eoe_sim step.
+    const FN=40, FN2=FN*FN, FN3=FN*FN*FN, FSP=4.5;
+    const FORIG=new THREE.Vector3(-FN*FSP/2, 5, -FN*FSP/2);
+    const FP={chi:1.0,ca:1.0,lam:0.5,gamma:0.4,grav:0.12,inflow:0.03,outflow:0.012,noise:0.0035,dt:0.05};
+    const fphi=new Float32Array(FN3), fpsi=new Float32Array(FN3), fM=new Float32Array(FN3);
+    const _fa=new Float32Array(FN3), _fb=new Float32Array(FN3), _fs=new Float32Array(FN3);
+    const fpos=new Float32Array(FN3*3), fcol=new Float32Array(FN3*3), fsz=new Float32Array(FN3);
+    const fieldGroup=new THREE.Group(); scene.add(fieldGroup);
+    (function seedField(){ const NB=60, cx=[],cy=[],cz=[],cr=[];
+      for(let bn=0;bn<NB;bn++){ cx.push(3+Math.random()*(FN-6)); cy.push(3+Math.random()*(FN-6)); cz.push(3+Math.random()*(FN-6)); cr.push(2.6*(0.6+0.8*Math.random())); }
+      for(let x=0;x<FN;x++)for(let y=0;y<FN;y++)for(let z=0;z<FN;z++){ const idx=x*FN2+y*FN+z;
+        fpos[idx*3]=FORIG.x+(x+0.5)*FSP+(Math.random()-0.5)*FSP*0.5;
+        fpos[idx*3+1]=FORIG.y+(y+0.5)*FSP+(Math.random()-0.5)*FSP*0.5;
+        fpos[idx*3+2]=FORIG.z+(z+0.5)*FSP+(Math.random()-0.5)*FSP*0.5;
+        let p=0; for(let bn=0;bn<NB;bn++){ const dx=x-cx[bn],dy=y-cy[bn],dz=z-cz[bn],r=cr[bn]; p+=0.95*Math.exp(-(dx*dx+dy*dy+dz*dz)/(2*r*r)); }
+        fphi[idx]=p>1?1:p; } })();
+    function fblur(src,dst,axis){ const st=axis===0?FN2:(axis===1?FN:1), wrapHi=st*(FN-1);
+      for(let x=0;x<FN;x++)for(let y=0;y<FN;y++)for(let z=0;z<FN;z++){ const i=x*FN2+y*FN+z; const c=axis===0?x:(axis===1?y:z);
+        const im=(c===0)?i+wrapHi:i-st, ip=(c===FN-1)?i-wrapHi:i+st; dst[i]=(src[im]+src[i]+src[ip])/3; } }
+    function fieldStep(){ fblur(fphi,_fa,2); fblur(_fa,_fb,1); fblur(_fb,_fs,0);
+      let mean=0; for(let i=0;i<FN3;i++) mean+=fphi[i]; mean/=FN3;
+      const chi=FP.chi,ca=FP.ca,lam=FP.lam,gamma=FP.gamma,grav=FP.grav,inflow=FP.inflow,outflow=FP.outflow,noise=FP.noise,dt=FP.dt;
+      for(let i=0;i<FN3;i++){ const sv=_fs[i], dd=sv-0.5, coord=4*dd*dd, M=(chi+ca*coord)*sv-lam; fM[i]=M;
+        let drive=M*sv*(1-fphi[i])+grav*(sv-mean)*fphi[i];
+        const ps=fpsi[i]+dt*(drive-gamma*fpsi[i]); fpsi[i]=ps;
+        let p=fphi[i]+dt*ps+inflow*dt*sv; p-=outflow*dt*p; p+=noise*(Math.random()*2-1);
+        fphi[i]=p<0?0:(p>1?1:p); } }
+    function fieldRebuild(){ for(let i=0;i<FN3;i++){ const ph=fphi[i];
+        if(ph>0.12){ const Mn=clamp01((fM[i]+0.5)/2.0), c=mcolRGB(Mn); fcol[i*3]=c[0]; fcol[i*3+1]=c[1]; fcol[i*3+2]=c[2]; fsz[i]=1300*(0.2+0.9*ph); }
+        else fsz[i]=0; }
+      fieldGeo.attributes.acol.needsUpdate=true; fieldGeo.attributes.asz.needsUpdate=true; }
+    const fieldGeo=new THREE.BufferGeometry();
+    fieldGeo.setAttribute('position',new THREE.BufferAttribute(fpos,3));
+    fieldGeo.setAttribute('acol',new THREE.BufferAttribute(fcol,3));
+    fieldGeo.setAttribute('asz',new THREE.BufferAttribute(fsz,1));
+    function fsoftTex(){ const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d'); const g=x.createRadialGradient(32,32,0,32,32,32);
+      g.addColorStop(0,'rgba(255,255,255,0.85)'); g.addColorStop(0.5,'rgba(255,255,255,0.22)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(0,0,64,64); return new THREE.CanvasTexture(c); }
+    const fieldMat=new THREE.ShaderMaterial({ uniforms:{uTex:{value:fsoftTex()},uDpr:{value:DPR},uMul:{value:1.0}}, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      vertexShader:'attribute float asz; attribute vec3 acol; uniform float uDpr; varying vec3 vC; void main(){ vC=acol; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=asz*uDpr/max(1.0,-mv.z); gl_Position=projectionMatrix*mv; }',
+      fragmentShader:'uniform sampler2D uTex; uniform float uMul; varying vec3 vC; void main(){ vec4 t=texture2D(uTex,gl_PointCoord); gl_FragColor=vec4(vC,1.0)*t.a*uMul; }' });
+    const fieldPts=new THREE.Points(fieldGeo,fieldMat); fieldPts.frustumCulled=false; fieldGroup.add(fieldPts);
+    cwMul.push({u:fieldMat.uniforms,base:1.0});
+    for(let k=0;k<60;k++) fieldStep(); fieldRebuild();
+    let _fstepc=0;
+    function setCosmos(level){ cosmosLevel=level; cosmicWeb.visible=level>0.001; fieldGroup.visible=level>0.001; for(let i=0;i<cwMul.length;i++) cwMul[i].u.uMul.value=cwMul[i].base*level; for(let i=0;i<cwOpac.length;i++) cwOpac[i].m.opacity=cwOpac[i].base*level; }
     if(typeof window!=="undefined"){ window.__eoeSetCosmos=setCosmos; }
 
     // ================= MATTER (shared geometry, pool of bodies) =================
@@ -750,7 +774,8 @@
     const clock=new THREE.Clock();
     function tick(){
       const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime; desktopMove(dt); oU.uTime.value=t;
-      if(cosmicWeb){ cosmicWeb.rotation.y+=dt*0.004; for(let i=0;i<cwGlows.length;i++){ const g=cwGlows[i]; g.material.opacity=cosmosLevel*g.userData.b*(0.7+0.3*Math.sin(t*0.6+g.userData.tw)); } }
+      if(cosmicWeb){ for(let i=0;i<cwGlows.length;i++){ const g=cwGlows[i]; g.material.opacity=cosmosLevel*g.userData.b*(0.7+0.3*Math.sin(t*0.6+g.userData.tw)); } }
+      if(fieldGroup.visible){ _fstepc++; if((_fstepc&1)===0){ fieldStep(); fieldRebuild(); } }
 
       if(renderer.xr.isPresenting && xrSession){ const srcs=xrSession.inputSources;
         for(let i=0;i<srcs.length && i<controllers.length;i++){ const gp=srcs[i].gamepad; const c=controllers[i]; if(!gp||!c) continue;
