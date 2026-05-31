@@ -44,6 +44,9 @@
   #benchPanel .chip{min-width:34px;text-align:center;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:14px;color:#cdd9ef;background:rgba(74,144,212,0.10);border:1px solid rgba(160,180,210,0.14);transition:all .14s;}
   #benchPanel .chip:hover{border-color:rgba(236,183,78,0.6);}
   #benchPanel .chip.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.20);color:#ffe2a6;}
+  #benchPanel .chip.prod{background:rgba(126,178,127,0.12);border-color:rgba(126,178,127,0.3);color:#cfe6cf;}
+  #benchPanel .chip.prod.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.20);color:#ffe2a6;}
+  #benchPanel .prodhead{width:100%;font-size:10px;letter-spacing:.06em;color:#7f8db0;text-transform:uppercase;margin:7px 2px 1px;}
   #benchReact{margin-top:12px;width:100%;padding:10px;border-radius:9px;cursor:pointer;text-align:center;font-size:14px;letter-spacing:.04em;color:#0a0d14;background:linear-gradient(180deg,#ecb74e,#d4a049);border:none;font-weight:600;}
   #benchReact:hover{filter:brightness(1.08);}
   #benchPanel .lensrow{display:flex;gap:6px;margin-top:6px;}
@@ -822,11 +825,35 @@
       'Au|F': {name:'Gold fluoride', f:'AuF\u2083', spec:'AuF', M:null}
     };
 
+    SPEC.NaOH ={kind:'curve', curve:[[300,0.92],[400,0.95],[500,0.96],[600,0.96],[700,0.95],[800,0.94]], uv:'A clear, caustic solution \u2014 no visible feature; it eats fats and skin.', label:'Sodium hydroxide'};
+    SPEC.H2CO3={kind:'curve', curve:[[300,0.93],[400,0.96],[500,0.97],[600,0.96],[700,0.95],[800,0.93]], uv:'Carbonated water \u2014 colourless and weakly acidic.', label:'Carbonic acid'};
+    const PRODUCT_REAG = {
+      H2O:  {sym:'H\u2082O',  name:'Water',            pos:2, en:3.0, cls:'polar',        spec:'H2O',  mol:true},
+      CO2:  {sym:'CO\u2082',  name:'Carbon dioxide',   pos:1, en:2.8, cls:'acidic_oxide', spec:'CO2',  mol:true},
+      H2:   {sym:'H\u2082',   name:'Dihydrogen',       pos:1, en:2.2, cls:'nonmetal',     spec:'H2',   mol:true},
+      NH3:  {sym:'NH\u2083',  name:'Ammonia',          pos:1, en:2.6, cls:'base',         spec:'NH3',  mol:true},
+      HF:   {sym:'HF',        name:'Hydrogen fluoride',pos:1, en:3.5, cls:'acid',         spec:'HF',   mol:true},
+      NaCl: {sym:'NaCl',      name:'Sodium chloride',  pos:0, en:0.0, cls:'salt',         spec:'NaCl', mol:true},
+      NaF:  {sym:'NaF',       name:'Sodium fluoride',  pos:0, en:0.0, cls:'salt',         spec:'NaF',  mol:true},
+      AuF:  {sym:'AuF\u2083', name:'Gold fluoride',    pos:0, en:0.0, cls:'salt',         spec:'AuF',  mol:true},
+      NaOH: {sym:'NaOH',      name:'Sodium hydroxide', pos:1, en:2.5, cls:'base',         spec:'NaOH', mol:true},
+      H2CO3:{sym:'H\u2082CO\u2083', name:'Carbonic acid', pos:0, en:0.0, cls:'acid_weak',  spec:'H2CO3',mol:true}
+    };
+    PROD['H2O|Na'] = {name:'Sodium hydroxide + hydrogen', f:'NaOH + H\u2082', spec:'NaOH', M:null, note:'sodium tears the H from water'};
+    PROD['CO2|H2O']= {name:'Carbonic acid', f:'H\u2082CO\u2083', spec:'H2CO3', M:null};
+    PROD['H2|O']   = {name:'Water', f:'H\u2082O', spec:'H2O', M:0.308, note:'combustion \u2014 hydrogen burns to water'};
+    PROD['F|H2']   = {name:'Hydrogen fluoride', f:'HF', spec:'HF', M:null, note:'explosive even in the dark'};
+    function getReagent(k){ return REAG[k] || PRODUCT_REAG[k] || null; }
+    const madeProducts=[];
+
     // the gate: read at the valence scale, NOT nuclear M
     function reactRead(ak,bk){
-      const a=REAG[ak], b=REAG[bk]; const key=[ak,bk].sort().join('|');
+      const a=getReagent(ak), b=getReagent(bk); const key=[ak,bk].sort().join('|');
+      const molInvolved = !!(a.mol||b.mol);
       if(a.pos===0 || b.pos===0){
         const closed = a.pos===0?a:b;
+        if(closed.mol) return {couples:false, kind:'inert',
+          reason:closed.name+' is a satisfied closure \u2014 its coupling positions are filled. It is stable; it will not readily react further here.'};
         return {couples:false, kind:'inert',
           reason:closed.name+' is substrate-complete \u2014 a closed shell, zero open coupling positions. There is nothing to couple into. Even fluorine, which takes everything else, cannot open it.'};
       }
@@ -841,6 +868,8 @@
       const dEN=Math.abs(a.en-b.en);
       const ionic = dEN>=1.7 && ((a.cls==='metal'&&b.cls==='nonmetal')||(b.cls==='metal'&&a.cls==='nonmetal'));
       const p=PROD[key]||null;
+      if(molInvolved && !p){ return {couples:false, kind:'uncurated',
+        reason:a.name+' + '+b.name+': both carry open coupling positions, so they likely react \u2014 but this product is beyond the curated, measured set, and the bench will not invent one it cannot stand behind.'}; }
       const violent = (a.sym==='F'||b.sym==='F');
       let reason;
       if(ionic){
@@ -906,7 +935,7 @@
     function placeReagents(){
       closA.home.set(benchCenter.x-0.85,benchCenter.y,benchCenter.z); closB.home.set(benchCenter.x+0.85,benchCenter.y,benchCenter.z);
       closA.center.copy(closA.home); closB.center.copy(closB.home); closP.center.copy(benchCenter);
-      const ca=tintFor(REAG[benchA].spec), cb=tintFor(REAG[benchB].spec);
+      const ca=tintFor(getReagent(benchA).spec), cb=tintFor(getReagent(benchB).spec);
       closA.u.uHeld.value.setRGB(ca[0],ca[1],ca[2]); closB.u.uHeld.value.setRGB(cb[0],cb[1],cb[2]);
       closA.radius=0.22; closB.radius=0.22; closA.form=1; closB.form=1; closA.vis=true; closB.vis=true; closP.vis=false; closP.form=0;
       bphase='idle'; bWaveDone=false; benchResult=null;
@@ -914,7 +943,8 @@
     function selectBench(slot,key){ if(slot==='A') benchA=key; else benchB=key; placeReagents(); drawBenchInfo(); refreshBenchChips(); }
 
     function runReaction(){ const r=reactRead(benchA,benchB); benchResult=r; bt=0; bWaveDone=false;
-      if(r.couples){ bphase='approach'; if(r.product){ const pc=tintFor(r.product.spec); closP.u.uHeld.value.setRGB(pc[0],pc[1],pc[2]); } }
+      if(r.couples){ bphase='approach'; if(r.product){ const pc=tintFor(r.product.spec); closP.u.uHeld.value.setRGB(pc[0],pc[1],pc[2]);
+          if(PRODUCT_REAG[r.product.spec] && madeProducts.indexOf(r.product.spec)<0){ madeProducts.push(r.product.spec); renderProductChips(); } } }
       else { bphase='inert'; }
       drawBenchInfo(); }
 
@@ -951,7 +981,7 @@
     function drawBenchInfo(){ const x=bictx; x.clearRect(0,0,BIW,BIH);
       x.fillStyle='rgba(9,12,20,0.96)'; rrect(x,6,6,BIW-12,BIH-12,22); x.fill();
       x.strokeStyle='rgba(212,160,73,0.4)'; x.lineWidth=2; rrect(x,6,6,BIW-12,BIH-12,22); x.stroke();
-      const A=REAG[benchA], B=REAG[benchB]; x.textAlign='left';
+      const A=getReagent(benchA), B=getReagent(benchB); x.textAlign='left';
       x.fillStyle='#e7eefc'; x.font='400 50px Georgia, serif'; x.fillText(A.name+'  +  '+B.name, 44, 90);
 
       const r=benchResult;
@@ -962,7 +992,9 @@
         x.fillText((r.violent?'\u26a1 reacts hard \u2014 ':'\u2713 they couple \u2014 ')+(r.kind==='ionic'?'ionic closure':'covalent closure'),44,y); y+=46;
         if(r.product){ x.fillStyle='#e7eefc'; x.font='500 34px system-ui, sans-serif'; x.fillText('\u2192  '+r.product.name+'   '+r.product.f,44,y); y+=44;
           if(r.product.M!=null){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('substrate-sustained  M = +'+r.product.M.toFixed(3)+'  (measured on the 128\u00b3 lattice)',44,y); y+=38; }
-          if(r.product.conceptual){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.conceptual+')',44,y); y+=34; } }
+          if(r.product.conceptual){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.conceptual+')',44,y); y+=34; }
+          if(r.product.note){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.note+')',44,y); y+=34; } }
+      } else if(r.kind==='uncurated'){ x.fillStyle='#9fb3d6'; x.font='600 28px system-ui, sans-serif'; x.fillText('\u2014 beyond the curated set',44,y); y+=44;
       } else { x.fillStyle='#6fb0e0'; x.font='600 30px system-ui, sans-serif'; x.fillText('\u2014 no reaction',44,y); y+=44; }
 
       if(r){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; const words=r.reason.split(' '); let line='',yy=y; const maxw=BIW-100;
@@ -1016,6 +1048,12 @@
 
     function refreshBenchChips(){ document.querySelectorAll('#benchPanel .chip').forEach(c=>{ const slot=c.getAttribute('data-slot'), key=c.getAttribute('data-key');
         c.classList.toggle('on', (slot==='A'&&key===benchA)||(slot==='B'&&key===benchB)); }); }
+    function renderProductChips(){ ['A','B'].forEach(slot=>{ const row=document.getElementById('benchRow'+slot); if(!row) return;
+        let div=row.querySelector('.prodhead'); if(!div && madeProducts.length){ div=document.createElement('div'); div.className='prodhead'; div.textContent='\u2014 products you\u2019ve made \u2014'; row.appendChild(div); }
+        madeProducts.forEach(spec=>{ if(row.querySelector('.chip[data-key="'+spec+'"]')) return; const pr=PRODUCT_REAG[spec];
+          const el=document.createElement('div'); el.className='chip prod'; el.setAttribute('data-slot',slot); el.setAttribute('data-key',spec);
+          el.textContent=pr.sym; el.title=pr.name+' (carry forward)'; el.addEventListener('click',()=>selectBench(slot,spec)); row.appendChild(el); }); });
+      refreshBenchChips(); }
     function refreshLensButtons(){ document.querySelectorAll('#benchPanel .lensbtn').forEach((c,i)=> c.classList.toggle('on', i===benchLens)); }
     let benchPanelBuilt=false;
     function buildBenchPanel(){ if(benchPanelBuilt) return; benchPanelBuilt=true;
@@ -1024,7 +1062,7 @@
           el.textContent=REAG[key].sym; el.title=REAG[key].name; el.addEventListener('click',()=>selectBench(slot,key)); row.appendChild(el); }); });
       const rb=document.getElementById('benchReact'); if(rb) rb.addEventListener('click',()=>runReaction());
       const lr=document.getElementById('benchLenses'); if(lr){ LENSES.forEach((L,i)=>{ const el=document.createElement('div'); el.className='lensbtn'; el.textContent=L.name; el.addEventListener('click',()=>setBenchLens(i)); lr.appendChild(el); }); }
-      refreshBenchChips(); refreshLensButtons(); }
+      renderProductChips(); refreshBenchChips(); refreshLensButtons(); }
     buildBenchPanel();
 
     // ===================== SINGLE CELL — the first dissipative closure =====================
