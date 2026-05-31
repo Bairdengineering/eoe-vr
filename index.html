@@ -18,7 +18,7 @@
   }
   #title { font-size: clamp(22px, 6vw, 40px); letter-spacing:.06em; font-weight:400; }
   #title b { color: var(--gold); font-weight:600; }
-  #sub { font-size: clamp(13px,3.4vw,16px); color:#9fb3d6; max-width:560px; line-height:1.6;
+  #sub { font-size: clamp(13px,3.4vw,16px); color:#9fb3d6; max-width:580px; line-height:1.6;
     font-family: ui-sans-serif, system-ui, sans-serif; }
   #enter {
     pointer-events:auto; cursor:pointer; margin-top:6px;
@@ -29,15 +29,12 @@
     transition: transform .2s ease, box-shadow .2s ease;
   }
   #enter:hover { transform: translateY(-2px); box-shadow:0 0 0 1px rgba(212,160,73,.6), 0 0 60px rgba(212,160,73,.5); }
-  #enter:disabled { background:#26303f; color:#7e93b5; box-shadow:none; cursor:default; }
-  #hint { font-size:12px; color:#5f7299; font-family: ui-sans-serif, system-ui, sans-serif; letter-spacing:.05em; max-width:560px; line-height:1.7;}
+  #hint { font-size:12px; color:#5f7299; font-family: ui-sans-serif, system-ui, sans-serif; letter-spacing:.05em; max-width:580px; line-height:1.7;}
   .dim { opacity:0 !important; pointer-events:none; }
-  /* desktop framework readout */
   #hud {
     position:fixed; left:16px; bottom:14px; z-index:9; pointer-events:none;
     font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:12px;
-    color:#9fb3d6; line-height:1.55; opacity:.85;
-    text-shadow:0 0 8px rgba(0,0,0,.8);
+    color:#9fb3d6; line-height:1.55; opacity:.85; text-shadow:0 0 8px rgba(0,0,0,.8);
   }
   #hud b { color:#e7eefc; font-weight:600; }
   #hud .m { color: var(--gold); }
@@ -46,14 +43,14 @@
 <body>
   <div id="ui">
     <div id="title">The <b>Substrate</b> Closure</div>
-    <div id="sub">A twist pulls a closure together out of the field — it holds, breathes at its own frequency, then dissolves back into the substrate, and rebuilds. You watch it from the outside, the way an observer reads a closure it is not inside of.</div>
+    <div id="sub">A ring pulls together out of the field, twists into a figure&#8209;eight, and the twist drives it spinning &mdash; two axes, the bipoles turning and the wave front running around &mdash; until it spins up into a body, like a planet. Then it breathes, dissolves, and rebuilds.</div>
     <button id="enter">Enter VR</button>
-    <div id="hint">Quest: open in the Quest Browser, Enter VR, then walk around it · squeeze a trigger to feed the field · Desktop: drag to orbit, scroll to zoom</div>
+    <div id="hint">Quest: open in the Quest Browser, Enter VR, then walk around it &middot; squeeze a trigger to feed the field &middot; Desktop: drag to orbit, scroll to zoom</div>
   </div>
 
   <div id="hud">
     <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">forming</span></div>
-    <div><b>χs − λ</b> &nbsp; closure margin</div>
+    <div><b>&chi;s &minus; &lambda;</b> &nbsp; twist drives rotation</div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -64,19 +61,15 @@
     const smoothstep = (a,b,x) => smooth((x-a)/(b-a));
     const lerp = (a,b,t)=>a+(b-a)*t;
 
-    // ============================================================
-    //  TUNING — the closure now sits OUT IN FRONT of you, not
-    //  around your head. Tell Nathan-loop values to nudge:
-    //    CENTER  : where the closure floats (x, height, depth ahead)
-    //    KNOT_R  : overall size of the twist body (~radius in m)
-    //    CLOUD_R : how far the dissolved substrate spreads
-    // ============================================================
-    const CENTER  = new THREE.Vector3(0, 1.30, -1.70); // ~1.7 m ahead, chest/eye height
-    const KNOT_R  = 0.42;   // size of the held twist
-    const CLOUD_R = 1.05;   // dissolved substrate halo
-    const COUNT   = 60000;
+    // ===================== TUNING =====================
+    const CENTER = new THREE.Vector3(0, 1.30, -1.70); // floats ahead, chest/eye height
+    const R      = 0.42;   // closure radius
+    const CLOUD_R= 1.00;   // dissolved substrate halo
+    const TUBE   = 0.05;   // rope thickness
+    const COUNT  = 60000;
+    const PERIOD = 24.0;   // seconds per full genesis cycle
+    // ==================================================
 
-    // ---- renderer / scene / camera ----
     const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
     renderer.setSize(innerWidth, innerHeight);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -88,7 +81,6 @@
     scene.fog = new THREE.FogExp2(0x07080f, 0.10);
 
     const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.02, 100);
-    // desktop start: pulled back, looking at the closure from outside
     let orbitR = 2.6, orbitYaw = 0.0, orbitPitch = 0.12;
     function placeDesktopCamera(){
       camera.position.set(
@@ -100,201 +92,177 @@
     }
     placeDesktopCamera();
 
-    // ---- floor grid for VR grounding ----
     const grid = new THREE.GridHelper(14, 28, 0x1d3a5c, 0x12233a);
     grid.material.opacity = 0.16; grid.material.transparent = true;
     scene.add(grid);
 
-    // ============================================================
-    //  Build the two homes for every point:
-    //    cloudOffset : diffuse ball  (the DISSOLVED substrate)
-    //    knotOffset  : on a trefoil  (the HELD twist closure)
-    //  Stored as offsets from CENTER. uMix lerps between them.
-    // ============================================================
-    const cloudOffset = new Float32Array(COUNT*3);
-    const knotOffset  = new Float32Array(COUNT*3);
-    const seeds       = new Float32Array(COUNT);
-
-    function trefoil(t, out){
-      // (2,3) torus knot — a loop that closes on itself by twisting
-      out.set(
-        Math.sin(t) + 2*Math.sin(2*t),
-        Math.cos(t) - 2*Math.cos(2*t),
-       -Math.sin(3*t)
-      );
-    }
-    const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
-    const KNOT_SCALE = KNOT_R / 3.0; // trefoil spans ~±3
-    const TUBE_R = 0.26;             // rope thickness, in trefoil units
-
+    // ---- per-point data ----
+    // position attr = diffuse cloud home (dissolved substrate)
+    // aPhase = parameter t along the loop (0..2pi)
+    // aTube  = small offset giving the rope/shell thickness
+    // aSeed  = randomness (sphere latitude, jitter)
+    const cloud = new Float32Array(COUNT*3);
+    const aPhase= new Float32Array(COUNT);
+    const aTube = new Float32Array(COUNT*3);
+    const aSeed = new Float32Array(COUNT);
     for (let i=0;i<COUNT;i++){
-      seeds[i] = Math.random();
-
-      // diffuse ball, uniform in volume
+      aSeed[i]  = Math.random();
+      aPhase[i] = Math.random()*Math.PI*2;
+      // diffuse ball
       const u=Math.random(), v=Math.random();
       const th=2*Math.PI*u, ph=Math.acos(2*v-1);
       const r=CLOUD_R*Math.cbrt(Math.random());
-      cloudOffset[i*3+0]=r*Math.sin(ph)*Math.cos(th);
-      cloudOffset[i*3+1]=r*Math.cos(ph);
-      cloudOffset[i*3+2]=r*Math.sin(ph)*Math.sin(th);
-
-      // point on the trefoil + a little tube thickness so it's a solid rope
-      const t = 2*Math.PI*Math.random();
-      trefoil(t, tmpA);
-      // random offset inside a small sphere (approximate tube)
+      cloud[i*3+0]=r*Math.sin(ph)*Math.cos(th);
+      cloud[i*3+1]=r*Math.cos(ph);
+      cloud[i*3+2]=r*Math.sin(ph)*Math.sin(th);
+      // tube offset (small sphere)
       const su=Math.random(), sv=Math.random();
       const sth=2*Math.PI*su, sph=Math.acos(2*sv-1);
-      const sr=TUBE_R*Math.cbrt(Math.random());
-      tmpB.set(sr*Math.sin(sph)*Math.cos(sth), sr*Math.cos(sph), sr*Math.sin(sph)*Math.sin(sth));
-      tmpA.add(tmpB).multiplyScalar(KNOT_SCALE);
-      knotOffset[i*3+0]=tmpA.x;
-      knotOffset[i*3+1]=tmpA.y;
-      knotOffset[i*3+2]=tmpA.z;
+      const sr=TUBE*Math.cbrt(Math.random());
+      aTube[i*3+0]=sr*Math.sin(sph)*Math.cos(sth);
+      aTube[i*3+1]=sr*Math.cos(sph);
+      aTube[i*3+2]=sr*Math.sin(sph)*Math.sin(sth);
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(cloudOffset, 3)); // dissolved home
-    geo.setAttribute('aKnot',    new THREE.BufferAttribute(knotOffset, 3));  // held home
-    geo.setAttribute('aSeed',    new THREE.BufferAttribute(seeds, 1));
+    geo.setAttribute('position', new THREE.BufferAttribute(cloud, 3));
+    geo.setAttribute('aPhase',   new THREE.BufferAttribute(aPhase, 1));
+    geo.setAttribute('aTube',    new THREE.BufferAttribute(aTube, 3));
+    geo.setAttribute('aSeed',    new THREE.BufferAttribute(aSeed, 1));
 
     const uniforms = {
-      uTime:    { value: 0 },
-      uMix:     { value: 0 },                 // 0 dissolved → 1 held
-      uCenter:  { value: CENTER.clone() },
-      uRotMat:  { value: new THREE.Matrix3() },
-      uSize:    { value: 12.0 },
-      uHeld:    { value: new THREE.Color('#d4a049') }, // gold = holding
-      uDissolved:{value: new THREE.Color('#3f74c4') }, // blue = dissolving
+      uTime:   { value: 0 },
+      uForm:   { value: 0 },     // 0 dissolved -> 1 fully formed body
+      uwEight: { value: 0 },     // ring -> figure-eight
+      uwBall:  { value: 0 },     // figure-eight -> sphere
+      uTwistZ: { value: 0 },     // half-twist over/under at the crossing
+      uWave:   { value: 0 },     // wave front circulation (minor axis)
+      uSpinMat:{ value: new THREE.Matrix3() }, // bulk rotation (major axis)
+      uR:      { value: R },
+      uCenter: { value: CENTER.clone() },
+      uSize:   { value: 12.0 },
+      uHeld:   { value: new THREE.Color('#d4a049') },
+      uDissolved:{value:new THREE.Color('#3f74c4') },
     };
 
     const mat = new THREE.ShaderMaterial({
-      uniforms,
-      transparent:true,
-      depthWrite:false,
-      blending:THREE.AdditiveBlending,
-      vertexShader:`
-        attribute vec3 aKnot;
-        attribute float aSeed;
-        uniform float uTime, uMix, uSize;
-        uniform vec3 uCenter;
-        uniform mat3 uRotMat;
-        varying float vMix;
-        varying float vGlow;
-        void main(){
-          // breathing jitter, strongest while held
-          float br = sin(uTime*1.6 + aSeed*6.2831) * 0.012 * (0.35 + uMix);
-          vec3 cloud = position * (1.0 + 0.05*sin(uTime*0.3 + aSeed*6.0)); // slow drift
-          vec3 knot  = uRotMat * aKnot;                                    // the twist rotates
-          vec3 off   = mix(cloud, knot, uMix);
-          off += normalize(off + 0.0001) * br;
-          vec3 world = uCenter + off;
-
-          vec4 mv = modelViewMatrix * vec4(world, 1.0);
-          gl_Position = projectionMatrix * mv;
-          float pscale = mix(0.55, 1.25, uMix);
-          gl_PointSize = uSize * pscale * (1.0 / -mv.z);
-          vMix = uMix;
-          vGlow = 0.4 + 0.6*uMix;
-        }`,
-      fragmentShader:`
-        precision mediump float;
-        uniform vec3 uHeld, uDissolved;
-        varying float vMix;
-        varying float vGlow;
-        void main(){
-          vec2 d = gl_PointCoord - vec2(0.5);
-          float r = length(d);
-          if (r > 0.5) discard;
-          float a = smoothstep(0.5, 0.0, r);   // soft round falloff
-          vec3 col = mix(uDissolved, uHeld, vMix);
-          gl_FragColor = vec4(col * vGlow, a * (0.35 + 0.55*vGlow));
-        }`
+      uniforms, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      vertexShader:[
+        'attribute float aPhase;',
+        'attribute vec3 aTube;',
+        'attribute float aSeed;',
+        'uniform float uTime,uForm,uwEight,uwBall,uTwistZ,uWave,uR,uSize;',
+        'uniform mat3 uSpinMat;',
+        'uniform vec3 uCenter;',
+        'varying float vForm; varying float vLat; varying float vWave;',
+        'void main(){',
+        '  float t = aPhase;',
+        '  vec3 ring  = vec3(cos(t), sin(t), 0.0) * uR;',
+        '  vec3 eight = vec3(cos(t), sin(2.0*t), 0.0) * uR;',   // ring folds: y freq 1 -> 2
+        '  eight.z += uTwistZ * sin(t) * uR;',                  // half-twist lifts one strand
+        '  vec3 shape = mix(ring, eight, uwEight);',
+        '  shape.z += 0.04*uR*sin(2.0*t - uWave) * uwEight*(1.0-uwBall);', // wave runs the strands
+        '  float theta = acos(2.0*aSeed - 1.0);',               // sphere latitude
+        '  float az = t + uWave;',                              // azimuth + wave-front circulation
+        '  vec3 ball = vec3(sin(theta)*cos(az), cos(theta), sin(theta)*sin(az)) * uR*1.05;',
+        '  shape = mix(shape, ball, uwBall);',
+        '  vLat = mix(0.0, (2.0*aSeed-1.0), uwBall);',
+        '  shape += aTube * (1.0 - 0.3*uwBall);',
+        '  shape = uSpinMat * shape;',                          // major axis: bulk spin
+        '  vec3 world = uCenter + mix(position, shape, uForm);',
+        '  vForm = uForm;',
+        '  vWave = 0.5 + 0.5*sin(t - uWave);',                  // traveling brightness pulse
+        '  vec4 mv = modelViewMatrix * vec4(world,1.0);',
+        '  gl_Position = projectionMatrix * mv;',
+        '  float ps = mix(0.5,1.2,uForm);',
+        '  gl_PointSize = uSize*ps*(1.0/-mv.z);',
+        '}'
+      ].join('\n'),
+      fragmentShader:[
+        'precision mediump float;',
+        'uniform vec3 uHeld,uDissolved;',
+        'varying float vForm; varying float vLat; varying float vWave;',
+        'void main(){',
+        '  vec2 d = gl_PointCoord - vec2(0.5);',
+        '  float r = length(d);',
+        '  if (r > 0.5) discard;',
+        '  float a = smoothstep(0.5,0.0,r);',
+        '  vec3 col = mix(uDissolved, uHeld, vForm);',
+        '  float bands = 0.78 + 0.22*cos(vLat*8.0);',  // planet latitude bands (only when ball)
+        '  float wave  = 0.82 + 0.34*vWave;',          // wave-front shimmer
+        '  gl_FragColor = vec4(col*bands*wave, a*(0.4+0.5*vForm));',
+        '}'
+      ].join('\n')
     });
 
     const points = new THREE.Points(geo, mat);
     points.frustumCulled = false;
     scene.add(points);
 
-    // a soft core glow that brightens when the closure holds
-    const coreMat = new THREE.SpriteMaterial({
-      color: 0xd4a049, transparent:true, opacity:0.0,
-      blending:THREE.AdditiveBlending, depthWrite:false
-    });
+    const coreMat = new THREE.SpriteMaterial({ color:0xd4a049, transparent:true, opacity:0.0,
+      blending:THREE.AdditiveBlending, depthWrite:false });
     const core = new THREE.Sprite(coreMat);
-    core.scale.set(KNOT_R*2.4, KNOT_R*2.4, 1);
+    core.scale.set(R*2.6, R*2.6, 1);
     core.position.copy(CENTER);
     scene.add(core);
 
-    // ---- VR readout panel (canvas texture), sits just under the closure ----
-    const hudCanvas = document.createElement('canvas');
-    hudCanvas.width = 512; hudCanvas.height = 160;
+    // ---- VR readout panel ----
+    const hudCanvas = document.createElement('canvas'); hudCanvas.width=512; hudCanvas.height=160;
     const hctx = hudCanvas.getContext('2d');
     const hudTex = new THREE.CanvasTexture(hudCanvas);
-    const hudMat = new THREE.SpriteMaterial({ map:hudTex, transparent:true, depthWrite:false, opacity:0.92 });
-    const hudSprite = new THREE.Sprite(hudMat);
-    hudSprite.scale.set(0.62, 0.19, 1);
-    hudSprite.position.set(CENTER.x, CENTER.y - KNOT_R - 0.34, CENTER.z);
+    const hudSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map:hudTex, transparent:true, depthWrite:false, opacity:0.92 }));
+    hudSprite.scale.set(0.66, 0.20, 1);
+    hudSprite.position.set(CENTER.x, CENTER.y - R - 0.42, CENTER.z);
     scene.add(hudSprite);
     function drawVRHud(M, phase){
       hctx.clearRect(0,0,512,160);
-      hctx.fillStyle = 'rgba(7,8,15,0.55)';
-      hctx.fillRect(0,0,512,160);
-      hctx.font = '600 64px ui-monospace, Menlo, monospace';
-      hctx.fillStyle = M>=0 ? '#d4a049' : '#4a90d4';
+      hctx.fillStyle='rgba(7,8,15,0.55)'; hctx.fillRect(0,0,512,160);
       hctx.textAlign='center';
-      hctx.fillText((M>=0?'+':'') + M.toFixed(2), 256, 78);
-      hctx.font = '300 30px ui-sans-serif, system-ui, sans-serif';
-      hctx.fillStyle = '#9fb3d6';
-      hctx.fillText('M = χs − λ   ·   ' + phase, 256, 122);
-      hudTex.needsUpdate = true;
+      hctx.font='600 60px ui-monospace, Menlo, monospace';
+      hctx.fillStyle = M>=0 ? '#d4a049' : '#4a90d4';
+      hctx.fillText((M>=0?'+':'')+M.toFixed(2), 256, 74);
+      hctx.font='300 28px ui-sans-serif, system-ui, sans-serif';
+      hctx.fillStyle='#9fb3d6';
+      hctx.fillText('M = \u03C7s \u2212 \u03BB   \u00B7   '+phase, 256, 120);
+      hudTex.needsUpdate=true;
     }
 
-    // ============================================================
-    //  Growth → peak → breathe → collapse → dissolve → rebuild
-    //  M is the stability margin. Feeding the field (trigger) adds
-    //  energy that holds M up; let go and it runs its collapse.
-    // ============================================================
-    let M = -0.6;          // current margin
-    let cycle = 0.0;       // 0..1 autonomous cycle clock
-    const PERIOD = 15.0;   // seconds per full margin cycle
-    let feed = 0.0;        // 0..1 controller drive
+    // ---- genesis cycle ----
+    let M=-0.9, cycle=0.0, feed=0.0, wave=0.0, spin=0.0, prevForm=0.0;
+    const spinAxis = new THREE.Vector3(0.16, 1.0, 0.10).normalize(); // tilted, planet-like
+    const sm4=new THREE.Matrix4(), sm3=new THREE.Matrix3();
 
-    function autoMargin(p){
-      // shaped envelope over one cycle
-      if (p < 0.16)  return lerp(-0.9,  1.0, smoothstep(0,0.16,p));           // growth
-      if (p < 0.50)  return 0.78 + 0.18*Math.sin((p-0.16)*22.0);             // hold + breathe
-      if (p < 0.64)  return lerp( 1.0, -0.9, smoothstep(0.50,0.64,p));        // collapse
-      return lerp(-0.9, -0.9, 0) ;                                           // dissolved dwell
+    function formFromCycle(p){
+      if (p < 0.45) return smoothstep(0,0.45,p);   // grow: ring->twist->spinup->ball
+      if (p < 0.62) return 1.0;                     // hold / breathe
+      if (p < 0.80) return 1.0 - smoothstep(0.62,0.80,p); // collapse
+      return 0.0;                                   // dissolved dwell
     }
-    function phaseLabel(p, fed){
-      if (fed) return 'fed · holding';
-      if (p < 0.16) return 'forming';
-      if (p < 0.50) return 'breathing';
-      if (p < 0.64) return 'collapsing';
-      return 'dissolved';
+    function phaseLabel(form, feeding, collapsing){
+      if (form < 0.05) return 'dissolved';
+      if (collapsing)  return 'collapsing';
+      if (feeding && form > 0.9) return 'fed \u00B7 spinning';
+      if (form > 0.95) return 'spinning \u00B7 held';
+      if (form < 0.30) return 'forming ring';
+      if (form < 0.55) return 'twisting to \u221E';
+      if (form < 0.78) return 'spinning up';
+      return 'becoming a body';
     }
 
     const hudM = document.getElementById('hudM');
     const hudPhase = document.getElementById('hudPhase');
 
-    // ---- rotation of the twist (tilted axis, so twist reads from outside) ----
-    const rotAxis = new THREE.Vector3(0.28, 1.0, 0.16).normalize();
-    let rotAngle = 0;
-    const rotM4 = new THREE.Matrix4();
-    const rotM3 = new THREE.Matrix3();
-
-    // ---- desktop orbit controls ----
+    // ---- desktop orbit ----
     let dragging=false, px=0, py=0;
     const dom = renderer.domElement;
     dom.addEventListener('pointerdown', e=>{ dragging=true; px=e.clientX; py=e.clientY; document.getElementById('ui').classList.add('dim'); });
     addEventListener('pointerup', ()=> dragging=false);
     addEventListener('pointermove', e=>{
       if(!dragging || renderer.xr.isPresenting) return;
-      orbitYaw   -= (e.clientX-px)*0.006;
+      orbitYaw -= (e.clientX-px)*0.006;
       orbitPitch += (e.clientY-py)*0.006;
       orbitPitch = Math.max(-1.2, Math.min(1.2, orbitPitch));
-      px=e.clientX; py=e.clientY;
-      placeDesktopCamera();
+      px=e.clientX; py=e.clientY; placeDesktopCamera();
     });
     dom.addEventListener('wheel', e=>{
       if (renderer.xr.isPresenting) return;
@@ -307,89 +275,88 @@
     const enterBtn = document.getElementById('enter');
     let controllers = [];
     let vrAvailable = false;
-
     function dismissOverlay(){ ui.classList.add('dim'); }
-
     if (navigator.xr) {
       navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
-        vrAvailable = ok;
-        enterBtn.textContent = ok ? 'Enter VR' : 'Enter — Desktop View';
-      }).catch(()=>{ enterBtn.textContent = 'Enter — Desktop View'; });
-    } else {
-      enterBtn.textContent = 'Enter — Desktop View';
-    }
-
+        vrAvailable=ok; enterBtn.textContent = ok ? 'Enter VR' : 'Enter \u2014 Desktop View';
+      }).catch(()=>{ enterBtn.textContent='Enter \u2014 Desktop View'; });
+    } else { enterBtn.textContent='Enter \u2014 Desktop View'; }
     enterBtn.addEventListener('click', async ()=>{
-      if (!vrAvailable){ dismissOverlay(); return; }   // desktop: just clear the overlay
+      if (!vrAvailable){ dismissOverlay(); return; }
       try{
-        const session = await navigator.xr.requestSession('immersive-vr',
-          { optionalFeatures:['local-floor','bounded-floor'] });
+        const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures:['local-floor','bounded-floor'] });
         renderer.xr.setReferenceSpaceType('local-floor');
         await renderer.xr.setSession(session);
         dismissOverlay();
         for (let i=0;i<2;i++){
           const c = renderer.xr.getController(i);
-          c.addEventListener('selectstart', ()=> c.userData.feeding = true);
-          c.addEventListener('selectend',   ()=> c.userData.feeding = false);
-          scene.add(c);
-          controllers.push(c);
+          c.addEventListener('selectstart', ()=> c.userData.feeding=true);
+          c.addEventListener('selectend',   ()=> c.userData.feeding=false);
+          scene.add(c); controllers.push(c);
         }
         session.addEventListener('end', ()=> ui.classList.remove('dim'));
       }catch(err){ console.warn('VR session failed:', err); dismissOverlay(); }
     });
 
-    // ---- main loop ----
+    // desktop: hold SHIFT to feed the field
+    const shim = { userData:{feeding:false} };
+    controllers.push(shim);
+    addEventListener('keydown', e=>{ if(e.key==='Shift') shim.userData.feeding=true; });
+    addEventListener('keyup',   e=>{ if(e.key==='Shift') shim.userData.feeding=false; });
+
+    // ---- loop ----
     const clock = new THREE.Clock();
     function tick(){
       const dt = Math.min(clock.getDelta(), 0.05);
       const t = clock.elapsedTime;
       uniforms.uTime.value = t;
 
-      // feed from controllers (or hold SHIFT on desktop handled below)
-      let anyFeed = false;
-      for (const c of controllers) if (c.userData.feeding) anyFeed = true;
-      feed += ((anyFeed?1:0) - feed) * Math.min(1, dt*4);
+      let anyFeed=false;
+      for (const c of controllers) if (c.userData.feeding) anyFeed=true;
+      feed += ((anyFeed?1:0)-feed)*Math.min(1,dt*4);
 
-      // advance autonomous cycle; feeding slows the slide toward collapse
-      cycle = (cycle + dt/PERIOD*(1.0 - 0.85*feed)) % 1.0;
-      let target = autoMargin(cycle);
-      if (feed > 0.02) target = Math.max(target, lerp(target, 1.0, feed)); // feeding props M up
-      M += (target - M) * Math.min(1, dt*2.2);
+      cycle = (cycle + dt/PERIOD*(1.0 - 0.82*feed)) % 1.0;
+      let form = formFromCycle(cycle);
+      if (feed>0.02) form = Math.max(form, lerp(form,1.0,feed));
 
-      // mix: closure forms as M crosses zero, consolidates above
-      uniforms.uMix.value = smoothstep(-0.15, 0.55, M);
+      const collapsing = (form < prevForm - 0.0005) && form > 0.05;
+      prevForm = form;
 
-      // rotate the twist
-      rotAngle += dt * lerp(0.15, 0.7, uniforms.uMix.value);
-      rotM4.makeRotationAxis(rotAxis, rotAngle);
-      rotM3.setFromMatrix4(rotM4);
-      uniforms.uRotMat.value.copy(rotM3);
+      M = form*1.9 - 0.95;
+      if (form>0.95) M += 0.06*Math.sin(t*1.6);
 
-      // core glow tracks held-ness
-      coreMat.opacity = 0.05 + 0.22*uniforms.uMix.value;
+      const wEight = smoothstep(0.25,0.50,form);
+      const wBall  = smoothstep(0.72,1.00,form);
+      const twistZ = 0.38*smoothstep(0.25,0.55,form);
 
-      // readouts
-      const lab = phaseLabel(cycle, feed>0.2);
-      hudM.textContent = (M>=0?'+':'') + M.toFixed(2);
+      const waveSpeed = lerp(0.0,2.4, smoothstep(0.40,0.85,form));
+      const spinSpeed = lerp(0.0,1.15,smoothstep(0.45,0.90,form));
+      wave += waveSpeed*dt;
+      spin += spinSpeed*dt;
+      sm4.makeRotationAxis(spinAxis, spin); sm3.setFromMatrix4(sm4);
+
+      uniforms.uForm.value   = form;
+      uniforms.uwEight.value = wEight;
+      uniforms.uwBall.value  = wBall;
+      uniforms.uTwistZ.value = twistZ;
+      uniforms.uWave.value   = wave;
+      uniforms.uSpinMat.value.copy(sm3);
+
+      coreMat.opacity = 0.04 + 0.22*form;
+
+      const lab = phaseLabel(form, feed>0.2, collapsing);
+      hudM.textContent = (M>=0?'+':'')+M.toFixed(2);
       hudM.style.color = M>=0 ? '#d4a049' : '#4a90d4';
       hudPhase.textContent = lab;
       drawVRHud(M, lab);
-      hudSprite.material.opacity = 0.35 + 0.55*uniforms.uMix.value;
+      hudSprite.material.opacity = 0.30 + 0.55*form;
 
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(tick);
 
-    // desktop: hold SHIFT to feed the field (mirrors trigger squeeze)
-    addEventListener('keydown', e=>{ if(e.key==='Shift') controllers.length||(_shiftFeed(true)); });
-    addEventListener('keyup',   e=>{ if(e.key==='Shift') _shiftFeed(false); });
-    const _ctlShim = { userData:{feeding:false} };
-    controllers.push(_ctlShim); // shim so SHIFT works on desktop before VR
-    function _shiftFeed(on){ _ctlShim.userData.feeding = on; }
-
     addEventListener('resize', ()=>{
-      camera.aspect = innerWidth/innerHeight;
-      camera.updateProjectionMatrix();
+      camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
     });
   })();
