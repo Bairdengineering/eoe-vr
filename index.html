@@ -28,6 +28,8 @@
     font-size:12px; color:#9fb3d6; line-height:1.55; opacity:.85; text-shadow:0 0 8px rgba(0,0,0,.8); }
   #hud b { color:#e7eefc; font-weight:600; } #hud .m { color: var(--gold); }
 
+  #orbHint{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:18;color:#9fb3d6;font-size:13px;letter-spacing:.03em;background:rgba(7,9,15,0.6);padding:8px 18px;border-radius:22px;border:1px solid rgba(212,160,73,0.28);opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+  #orbHint.show{opacity:1;}
   #optBtn{position:fixed;top:14px;right:14px;z-index:20;width:34px;height:34px;border-radius:50%;
     display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;
     background:rgba(20,28,42,0.55);border:1px solid rgba(212,160,73,0.35);color:#cdd9ef;font-size:15px;
@@ -72,6 +74,7 @@
   </div>
   </div>
 
+  <div id="orbHint">Drag to orbit · scroll to zoom · click an element to build it</div>
   <div id="optBtn" title="Options">&#9881;</div>
   <div id="optPanel">
     <span class="close" id="optClose">&times;</span>
@@ -310,13 +313,13 @@
     const hudM=document.getElementById('hudM'), hudPhase=document.getElementById('hudPhase'), hudHeld=document.getElementById('hudHeld'), crossEl=document.getElementById('cross');
 
     // ---- desktop input ----
-    let dragging=false,pxv=0,pyv=0; const dom=renderer.domElement; const keys={};
+    let dragging=false,dragMoved=false,pxv=0,pyv=0; const dom=renderer.domElement; const keys={};
     let desktopActive=null, desktopLast=null, desktopGrab=false;
-    dom.addEventListener('pointerdown',e=>{ dragging=true; pxv=e.clientX; pyv=e.clientY; document.getElementById('ui').classList.add('dim'); });
+    dom.addEventListener('pointerdown',e=>{ dragging=true; dragMoved=false; pxv=e.clientX; pyv=e.clientY; document.getElementById('ui').classList.add('dim'); });
     addEventListener('pointerup',()=>dragging=false);
     dom.addEventListener('wheel',e=>{ if(renderer.xr.isPresenting) return; if(orbitOn){ orbDist=Math.max(0.9,Math.min(8.0, orbDist + e.deltaY*0.01)); applyDesktopCam(); return; } for(const b of pool){ if(b.grabbedBy==='desktop'){ b.grabDist=Math.max(0.5,Math.min(30.0, b.grabDist + e.deltaY*0.004)); } } },{passive:true});
-    addEventListener('pointermove',e=>{ mouseNDC.x=(e.clientX/innerWidth)*2-1; mouseNDC.y=-(e.clientY/innerHeight)*2+1; if(!dragging||renderer.xr.isPresenting) return; if(orbitOn){ orbYaw-=(e.clientX-pxv)*0.006; orbPitch+=(e.clientY-pyv)*0.006; orbPitch=Math.max(-0.45,Math.min(1.25,orbPitch)); } else { dYaw-=(e.clientX-pxv)*0.005; dPitch-=(e.clientY-pyv)*0.005; dPitch=Math.max(-1.3,Math.min(0.6,dPitch)); } pxv=e.clientX; pyv=e.clientY; applyDesktopCam(); });
-    dom.addEventListener('click',e=>{ if(renderer.xr.isPresenting||mode!=='table'||!hoverZ) return; const o=ELEM.find(x=>x[0]===hoverZ); if(o) showElement(o); });
+    addEventListener('pointermove',e=>{ mouseNDC.x=(e.clientX/innerWidth)*2-1; mouseNDC.y=-(e.clientY/innerHeight)*2+1; if(!dragging||renderer.xr.isPresenting) return; dragMoved=true; if(orbitOn){ orbYaw-=(e.clientX-pxv)*0.006; orbPitch+=(e.clientY-pyv)*0.006; orbPitch=Math.max(-0.45,Math.min(1.25,orbPitch)); } else { dYaw-=(e.clientX-pxv)*0.005; dPitch-=(e.clientY-pyv)*0.005; dPitch=Math.max(-1.3,Math.min(0.6,dPitch)); } pxv=e.clientX; pyv=e.clientY; applyDesktopCam(); });
+    dom.addEventListener('click',e=>{ if(renderer.xr.isPresenting||mode!=='table'||!hoverZ||dragMoved) return; const o=ELEM.find(x=>x[0]===hoverZ); if(o) showElement(o); });
     addEventListener('keydown',e=>{ keys[e.code]=true;
       if(e.code==='Space'){ e.preventDefault(); if(!renderer.xr.isPresenting && !desktopActive && mode==='sandbox'){ poseOf('desktop',_o,_d); intersectSea(_o,_d,_spot); desktopActive=spawnBody('desktop',_spot); desktopLast=desktopActive; } }
       if(e.code==='KeyC'){ let tg=desktopActive||((desktopLast&&!desktopLast.free&&!desktopLast.held)?desktopLast:null); if(tg&&!tg.held){ commitBody(tg); desktopActive=null; } }
@@ -326,7 +329,7 @@
       if(e.code==='Space'){ if(desktopActive){ toPending(desktopActive); desktopActive=null; } }
       if(e.code==='KeyG'){ for(const b of pool) if(b.grabbedBy==='desktop') b.grabbedBy=null; desktopGrab=false; } });
     function desktopMove(dt){ if(renderer.xr.isPresenting) return;
-      if(orbitOn){ if(!dragging) orbYaw+=dt*0.28; applyDesktopCam(); return; }
+      if(orbitOn){ applyDesktopCam(); return; }
       const sp=3.2*dt, fx=Math.sin(dYaw), fz=-Math.cos(dYaw);
       if(keys['KeyW']){ dPos.x+=fx*sp; dPos.z+=fz*sp; } if(keys['KeyS']){ dPos.x-=fx*sp; dPos.z-=fz*sp; }
       if(keys['KeyA']){ dPos.x+=fz*sp; dPos.z-=fx*sp; } if(keys['KeyD']){ dPos.x-=fz*sp; dPos.z+=fx*sp; } applyDesktopCam(); }
@@ -502,7 +505,7 @@
       showcase=b; selZ=o[0]; drawInfo(o); infoPlane.visible=true; drawTable(); }
     function setMode(m){ if(m==='table'){ mode='table'; clearSandboxBodies(); selZ=0; hoverZ=0; infoPlane.visible=false; tableGroup.visible=true; drawTable();
         if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=2.7; orbFocus.set(0,1.3,-1.95); applyDesktopCam(); } }
-      else { mode='sandbox'; tableGroup.visible=false; infoPlane.visible=false; if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); } }
+      else { mode='sandbox'; tableGroup.visible=false; infoPlane.visible=false; if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); } const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', mode==='table' && !renderer.xr.isPresenting); }
     if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; }
 
     function interactBodies(dt){
