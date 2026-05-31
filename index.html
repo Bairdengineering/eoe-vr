@@ -50,6 +50,12 @@
   #benchPanel .lensbtn{flex:1;text-align:center;padding:7px 6px;border-radius:8px;cursor:pointer;font-size:12px;color:#cdd9ef;background:rgba(74,144,212,0.10);border:1px solid rgba(160,180,210,0.14);transition:all .14s;}
   #benchPanel .lensbtn:hover{border-color:rgba(236,183,78,0.6);}
   #benchPanel .lensbtn.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.20);color:#ffe2a6;}
+  #cellPanel{position:fixed;top:60px;left:14px;z-index:19;background:rgba(7,9,15,0.78);border:1px solid rgba(212,160,73,0.25);border-radius:14px;padding:12px 13px 14px;width:240px;display:none;}
+  #cellPanel.show{display:block;}
+  #cellPanel .hd{font-family:ui-serif,Georgia,serif;font-size:17px;color:#e7eefc;margin:2px 2px 8px;letter-spacing:.03em;}
+  #cellPanel button{width:100%;padding:11px;border-radius:9px;cursor:pointer;text-align:center;font-size:14px;letter-spacing:.03em;color:#0a0d14;background:linear-gradient(180deg,#ecb74e,#d4a049);border:none;font-weight:600;transition:filter .14s;}
+  #cellPanel button:hover{filter:brightness(1.08);}
+  #cellPanel button.on{background:linear-gradient(180deg,#7fb27f,#5e9b5e);}
   #orbHint{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:18;color:#9fb3d6;font-size:13px;letter-spacing:.03em;background:rgba(7,9,15,0.6);padding:8px 18px;border-radius:22px;border:1px solid rgba(212,160,73,0.28);opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
   #orbHint.show{opacity:1;}
   #optBtn{position:fixed;top:14px;right:14px;z-index:20;width:34px;height:34px;border-radius:50%;
@@ -107,6 +113,12 @@
     <div class="lbl" style="margin-top:12px;">Lens of vision</div>
     <div class="lensrow" id="benchLenses"></div>
   </div>
+  <div id="cellPanel">
+    <div class="hd">Single Cell</div>
+    <div style="font-size:12px;color:#9fb3d6;line-height:1.6;margin:0 2px 10px;">A bounded closure that lives on throughput. Feed it and it holds; cut the flow and watch the books go red while its reserve coasts down.</div>
+    <button id="cellFeed">Feeding — cut the flow</button>
+    <button id="cellNew" style="margin-top:8px;background:rgba(74,144,212,0.12);color:#cdd9ef;">New cell</button>
+  </div>
   <div id="orbHint">Drag to orbit · scroll to zoom · click to build</div>
   <div id="optBtn" title="Options">&#9881;</div>
   <div id="optPanel">
@@ -143,6 +155,7 @@
     <div class="mode" id="modePT"><span class="nm">Periodic Table</span></div>
     <div class="mode" id="modeMOL"><span class="nm">Molecules</span></div>
     <div class="mode" id="modeBench"><span class="nm">Reaction Workbench</span></div>
+    <div class="mode" id="modeCell"><span class="nm">Single Cell</span></div>
     <div id="optNote">Point at any element and select it &mdash; it builds itself from the substrate, sized to its mass, coloured by its M. On laptop the element slowly turns; <b>drag to orbit it, scroll to zoom</b>. Noble gases wear a closed-shell halo.</div>
   </div>
 
@@ -1014,19 +1027,117 @@
       refreshBenchChips(); refreshLensButtons(); }
     buildBenchPanel();
 
+    // ===================== SINGLE CELL — the first dissipative closure =====================
+    // Validated 0-D model wired live: M = chi*J - lam (the books). J = throughput (fed or not).
+    // sigma = RESERVE (stored order). surplus fills it, deficit drains it. phi(matter) is left behind.
+    //   alive : M>=0, throughput covers maintenance, reserve full
+    //   dying : M<0 the instant feed stops, but reserve COASTS down -> reversible until spent
+    //   husk  : reserve spent, order gone, MATTER REMAINS (inert; returns to flow only by a decomposer)
+    const CELL={ chi:1.0, Jfed:0.6, lam:0.18, center:new THREE.Vector3(0,1.6,-3.0) };
+    const cellGroup=new THREE.Group(); cellGroup.visible=false; scene.add(cellGroup);
+    let cellState={ sigma:0.0, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0 };
+
+    function cellSoftTex(){ const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d');
+      const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.45,'rgba(255,255,255,0.4)'); g.addColorStop(1,'rgba(255,255,255,0)');
+      x.fillStyle=g; x.fillRect(0,0,64,64); return new THREE.CanvasTexture(c); }
+    const _cellTex=cellSoftTex();
+    // membrane shell — the wall, stable matter (a closure); interior lumen — the held gradient
+    function sphereShell(n,r0,r1){ const a=new Float32Array(n*3); for(let i=0;i<n;i++){ const u=Math.random()*2-1, th=Math.random()*Math.PI*2, rr=r0+(r1-r0)*Math.random();
+      const s=Math.sqrt(1-u*u); a[i*3]=rr*s*Math.cos(th); a[i*3+1]=rr*u; a[i*3+2]=rr*s*Math.sin(th); } return a; }
+    function ballFill(n,rmax){ const a=new Float32Array(n*3); for(let i=0;i<n;i++){ const u=Math.random()*2-1, th=Math.random()*Math.PI*2, rr=rmax*Math.cbrt(Math.random());
+      const s=Math.sqrt(1-u*u); a[i*3]=rr*s*Math.cos(th); a[i*3+1]=rr*u; a[i*3+2]=rr*s*Math.sin(th); } return a; }
+    const memGeo=new THREE.BufferGeometry(); memGeo.setAttribute('position',new THREE.BufferAttribute(sphereShell(2600,1.02,1.13),3));
+    const memMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.05,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+    const memPts=new THREE.Points(memGeo,memMat); memPts.frustumCulled=false; cellGroup.add(memPts);
+    const lumGeo=new THREE.BufferGeometry(); lumGeo.setAttribute('position',new THREE.BufferAttribute(ballFill(3600,0.97),3));
+    const lumMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.055,transparent:true,opacity:0.5,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+    const lumPts=new THREE.Points(lumGeo,lumMat); lumPts.frustumCulled=false; cellGroup.add(lumPts);
+    memPts.position.copy(CELL.center); lumPts.position.copy(CELL.center);
+
+    const _gold=new THREE.Color('#ecb74e'), _husk=new THREE.Color('#4b4d57'), _wallHusk=new THREE.Color('#5b5d68');
+
+    // info panel (3D canvas plane — VR-ready)
+    const CIW=820,CIH=560; const ccv=document.createElement('canvas'); ccv.width=CIW; ccv.height=CIH; const cctx=ccv.getContext('2d');
+    const ctex=new THREE.CanvasTexture(ccv);
+    const cellInfo=new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95*CIH/CIW), new THREE.MeshBasicMaterial({map:ctex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
+    cellInfo.renderOrder=16; cellInfo.position.set(1.95,1.7,-2.55); cellInfo.rotation.y=-0.45; cellInfo.visible=false; cellGroup.add(cellInfo);
+
+    function cellReset(){ cellState={ sigma:0.0, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0 }; refreshCellBtns(); drawCellInfo(); }
+    function cellSetFed(f){ if(cellState.deadAt!=null) return; cellState.fed=f; refreshCellBtns(); }
+
+    function drawCellInfo(){ const x=cctx, S=cellState; x.clearRect(0,0,CIW,CIH);
+      x.fillStyle='rgba(9,12,20,0.96)'; rrect(x,6,6,CIW-12,CIH-12,20); x.fill();
+      x.strokeStyle='rgba(212,160,73,0.4)'; x.lineWidth=2; rrect(x,6,6,CIW-12,CIH-12,20); x.stroke();
+      const J=(S.fed&&S.deadAt==null)?CELL.Jfed:0, M=CELL.chi*J-CELL.lam;
+      x.textAlign='left'; x.fillStyle='#e7eefc'; x.font='400 46px Georgia, serif'; x.fillText('Single Cell',44,84);
+      // state word
+      let word,col; if(S.deadAt!=null){ word='dead — husk'; col='#6fb0e0'; }
+      else if(M>=0){ word='alive'; col='#7fb27f'; } else { word='dying'; col='#e8a04a'; }
+      x.fillStyle=col; x.font='600 40px system-ui, sans-serif'; x.fillText(word,44,148);
+      // M = chi s - lam, the books
+      x.fillStyle='#9fb3d6'; x.font='300 26px system-ui, sans-serif'; x.fillText('M = \u03c7s \u2212 \u03bb   (the books: income vs maintenance)',44,206);
+      x.fillStyle=(M>=0?'#7fb27f':'#e0696b'); x.font='600 34px system-ui, sans-serif';
+      x.fillText('M = '+(M>=0?'+':'')+M.toFixed(3)+'   '+(M>=0?'surplus':'deficit'),44,250);
+      // reserve bar
+      x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('reserve (stored order \u03c3)',44,308);
+      { const bx=44,bw=CIW-88,bh=26,y=322; x.fillStyle='rgba(74,144,212,0.18)'; rrect(x,bx,y,bw,bh,9); x.fill();
+        x.fillStyle=S.deadAt!=null?'#5b5d68':(M>=0?'#ecb74e':'#e8a04a'); rrect(x,bx,y,bw*clamp01(S.sigma),bh,9); x.fill(); }
+      // feed indicator
+      x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif';
+      x.fillText('throughput: '+((S.fed&&S.deadAt==null)?'feeding (s = '+CELL.Jfed.toFixed(2)+')':'cut (s = 0)'),44,392);
+      // honest line
+      x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif';
+      const note = S.deadAt!=null ? 'Reserve spent, order gone. The matter stays \u2014 an inert husk. It returns to the flow only when something breaks it down.'
+        : (M>=0 ? 'Throughput covers maintenance. The gradient is held actively; surplus banks into reserve.'
+                : 'Income stopped, the books went red instantly \u2014 but the reserve coasts down. Feed it again before it empties and it recovers.');
+      const ws=note.split(' '); let ln='',yy=440; const mw=CIW-90;
+      for(const w of ws){ const tt=ln?ln+' '+w:w; if(x.measureText(tt).width>mw){ x.fillText(ln,44,yy); ln=w; yy+=30; } else ln=tt; } x.fillText(ln,44,yy);
+      x.fillStyle='#5f7299'; x.font='300 18px system-ui, sans-serif'; x.fillText('The first dissipative closure: alive only while throughput exceeds maintenance. Same M = \u03c7s \u2212 \u03bb, read at the cell.',44,CIH-26);
+      ctex.needsUpdate=true; }
+
+    function updateCell(dt,t){ const S=cellState; S.t+=dt;
+      const J=(S.fed&&S.deadAt==null)?CELL.Jfed:0, M=CELL.chi*J-CELL.lam;
+      // reserve dynamics — exactly the validated model
+      S.sigma += dt*(M>=0 ? M*(1-S.sigma) : M); S.sigma=clamp01(S.sigma);
+      if(S.sigma<=0.02 && S.deadAt==null){ S.deadAt=t; }
+      // colour by structural state (sigma); books (M) drive the readout, not the colour
+      const sg=S.sigma; const alive = S.deadAt==null;
+      lumMat.color.copy(_husk).lerp(_gold, alive?sg:0.0);
+      lumMat.opacity = 0.12 + 0.5*sg;
+      memMat.color.copy(_wallHusk).lerp(_gold, alive?clamp01(0.3+0.7*sg):0.15);
+      memMat.opacity = alive ? 0.9 : 0.4;
+      // heartbeat — pulse rate tracks reserve; none when dead
+      const rate = alive ? (0.6+2.2*sg) : 0; S.pulse += dt*rate;
+      const beat = 1 + (alive?0.05*sg:0)*Math.sin(S.pulse*2*Math.PI);
+      lumPts.scale.setScalar(beat); memPts.scale.setScalar(1+(alive?0.012*sg:0)*Math.sin(S.pulse*2*Math.PI));
+      if(alive && rate>0){ const cyc=Math.floor(S.pulse); if(cyc>S.wc){ S.wc=cyc; emitWavefront(CELL.center.x,CELL.center.y,CELL.center.z, 1.1, clamp01(0.25+0.5*sg)); } }
+      if((Math.floor(t*12)&3)===0) drawCellInfo(); }
+
+    function refreshCellBtns(){ const fb=document.getElementById('cellFeed'); if(fb){ const feeding=cellState.fed&&cellState.deadAt==null;
+        fb.textContent = feeding?'Feeding \u2014 cut the flow':'Start feeding'; fb.classList.toggle('on',feeding); fb.style.opacity=cellState.deadAt!=null?0.45:1; } }
+    let cellPanelBuilt=false;
+    function buildCellPanel(){ if(cellPanelBuilt) return; cellPanelBuilt=true;
+      const fb=document.getElementById('cellFeed'); if(fb) fb.addEventListener('click',()=>cellSetFed(!cellState.fed));
+      const rb=document.getElementById('cellNew'); if(rb) rb.addEventListener('click',()=>cellReset());
+      refreshCellBtns(); }
+    buildCellPanel();
+
     function setMode(m){ mode=m;
-      const tbl=(m==='table'), mol=(m==='mol'), bench=(m==='bench');
+      const tbl=(m==='table'), mol=(m==='mol'), bench=(m==='bench'), cell=(m==='cell');
       tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol; if(mol) drawMolShelf();
       benchGroup.visible=bench; benchInfo.visible=bench;
+      cellGroup.visible=cell; cellInfo.visible=cell;
+      const cpan=document.getElementById('cellPanel'); if(cpan) cpan.classList.toggle('show', cell && !renderer.xr.isPresenting);
+      if(cell){ cellReset(); }
       const mp=document.getElementById('molPicker'); if(mp) mp.classList.toggle('show', mol && !renderer.xr.isPresenting); molShelf.visible = mol && renderer.xr.isPresenting;
       const bp=document.getElementById('benchPanel'); if(bp) bp.classList.toggle('show', bench && !renderer.xr.isPresenting);
       if(bench){ placeReagents(); drawBenchInfo(); refreshBenchChips(); refreshLensButtons(); } else { closA.vis=closB.vis=closP.vis=false; closA.pts.visible=closB.pts.visible=closP.pts.visible=false; }
       if(!tbl){ selZ=0; hoverZ=0; }
       if(!mol){ molSel=-1; molHover=-1; curMol=null; for(const a of matom){ a.active=false; a.pts.visible=false; } mbPts.visible=false; molInfo.visible=false; }
-      if(tbl||mol||bench){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
-        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=bench?3.4:(mol?3.5:2.7); orbFocus.copy(bench?new THREE.Vector3(0,1.55,-2.5):(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95))); applyDesktopCam(); } }
+      if(tbl||mol||bench||cell){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
+        if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=cell?4.0:(bench?3.4:(mol?3.5:2.7)); orbFocus.copy(cell?new THREE.Vector3(0,1.6,-3.0):(bench?new THREE.Vector3(0,1.55,-2.5):(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95)))); applyDesktopCam(); } }
       else { if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); }
-      const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol||bench) && !renderer.xr.isPresenting); }
+      const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol||bench||cell) && !renderer.xr.isPresenting); }
     if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; }
 
     function interactBodies(dt){
@@ -1165,6 +1276,7 @@
 
       if(mode==='mol') updateMolecule(dt,t);
       if(mode==='bench') updateBench(dt,t);
+      if(mode==='cell') updateCell(dt,t);
       drawBonds(t);
       if(mode==='table' && showcase && !showcase.free && showcase.noble){ nobleHalo.visible=true; nobleHalo.position.set(showcase.center.x, showcase.center.y+showcase.radius*1.15*showcase.form, showcase.center.z); const hs=showcase.radius*4.3; nobleHalo.scale.set(hs,hs,1); nobleHalo.material.opacity=0.55*smoothstep(0.55,1.0,showcase.form); }
       else nobleHalo.visible=false;
@@ -1183,6 +1295,7 @@
     pt.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('table'); setCur(pt); p.classList.remove('open'); });
     const ml=document.getElementById('modeMOL'); ml.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('mol'); setCur(ml); p.classList.remove('open'); });
     const bw=document.getElementById('modeBench'); if(bw) bw.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('bench'); setCur(bw); p.classList.remove('open'); });
+    const cw=document.getElementById('modeCell'); if(cw) cw.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('cell'); setCur(cw); p.classList.remove('open'); });
     sb.addEventListener('click',()=>{ if(window.__eoeSetMode) window.__eoeSetMode('sandbox'); setCur(sb); p.classList.remove('open'); });
     const cosS=document.getElementById('cosmosSlider'), cosV=document.getElementById('cosmosVal');
     if(cosS){ cosS.addEventListener('input',()=>{ cosV.textContent=cosS.value+'%'; if(window.__eoeSetCosmos) window.__eoeSetCosmos(+cosS.value/100); }); }
