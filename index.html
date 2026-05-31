@@ -534,7 +534,7 @@
       for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) for(let k=j+1;k<n;k++){ if(within[i][j]&&within[j][k]&&within[i][k]){ ring[i+'_'+j]=ring[j+'_'+k]=ring[i+'_'+k]=true; } }
       let bi=0;
       for(const e of edges){ if(bi>=BONDS) break; const ln=bondPool[bi++]; const ar=ln.geometry.attributes.position.array;
-        ar[0]=e.a.center.x;ar[1]=e.a.center.y;ar[2]=e.a.center.z; ar[3]=e.b.center.x;ar[4]=e.b.center.y;ar[5]=e.b.center.z; ln.geometry.attributes.position.needsUpdate=true;
+        ar[0]=e.a.center.x;ar[1]=e.a.center.y+e.a.radius*1.15*e.a.form;ar[2]=e.a.center.z; ar[3]=e.b.center.x;ar[4]=e.b.center.y+e.b.radius*1.15*e.b.form;ar[5]=e.b.center.z; ln.geometry.attributes.position.needsUpdate=true;
         const isRing=ring[e.i+'_'+e.j]; const bal=1.0-Math.min(1,Math.abs(e.a.mass-e.b.mass)/0.6);
         ln.material.color.setHex(isRing?0xe8c46a:(bal>0.7?0xb9d18a:0x6fb0e0));
         ln.material.opacity=(isRing?0.75:0.42)*e.prox*(0.7+0.3*Math.sin(t*4.0)); ln.visible=true; }
