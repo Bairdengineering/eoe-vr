@@ -66,6 +66,17 @@
     background:rgba(20,28,42,0.55);border:1px solid rgba(212,160,73,0.35);color:#cdd9ef;font-size:15px;
     opacity:0.6;transition:opacity .25s, box-shadow .25s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
   #optBtn:hover{opacity:1;box-shadow:0 0 22px rgba(212,160,73,0.35);}
+  #capBtn{position:fixed;top:14px;right:56px;z-index:20;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;background:rgba(20,28,42,0.55);border:1px solid rgba(212,160,73,0.35);color:#ecb74e;font-size:16px;opacity:0.6;transition:opacity .25s,box-shadow .25s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+  #capBtn:hover{opacity:1;box-shadow:0 0 22px rgba(212,160,73,0.35);}
+  #capBtn.flash{opacity:1;box-shadow:0 0 0 4px rgba(236,183,78,0.95);}
+  #capGallery{position:fixed;top:58px;right:14px;z-index:22;width:244px;max-height:74vh;overflow-y:auto;display:none;background:rgba(9,12,20,0.93);border:1px solid rgba(212,160,73,0.3);border-radius:12px;padding:10px;}
+  #capGallery .ghd{color:#cdd9ef;font:600 12px system-ui;margin-bottom:8px;line-height:1.4;}
+  #capGallery .capShot{margin-bottom:10px;border-radius:8px;background:rgba(255,255,255,0.04);padding:6px;}
+  #capGallery .capShot img{width:100%;border-radius:6px;display:block;}
+  #capGallery .capShot button,#capGallery .capShot a{font:600 11px system-ui;margin-top:6px;margin-right:6px;padding:5px 9px;border-radius:7px;border:none;cursor:pointer;text-decoration:none;display:inline-block;}
+  #capGallery .capCopy{background:#ecb74e;color:#1a1206;}
+  #capGallery .capDl{background:rgba(74,144,212,0.25);color:#cdd9ef;}
+  #capGallery .capDel{background:rgba(224,105,107,0.2);color:#e0696b;float:right;}
   #optPanel{position:fixed;top:0;right:0;height:100%;width:344px;max-width:88vw;z-index:21;
     transform:translateX(112%);transition:transform .35s ease;pointer-events:auto;
     background:linear-gradient(180deg, rgba(9,12,20,0.97), rgba(7,9,16,0.97));
@@ -124,6 +135,8 @@
   </div>
   <div id="orbHint">Drag to orbit · scroll to zoom · click to build</div>
   <div id="optBtn" title="Options">&#9881;</div>
+  <div id="capBtn" title="Screenshot (P) — copies to clipboard">&#128247;</div>
+  <div id="capGallery"></div>
   <div id="optPanel">
     <span class="close" id="optClose">&times;</span>
     <h2>The <b>Substrate</b></h2>
@@ -496,9 +509,12 @@
     function endXR(){ xrSession=null; vrDiag=''; for(const c of controllers){ if(c&&c.userData) c.userData.inputSource=null; } controllers.length=0; ui.classList.remove('dim'); }
     if(renderer&&renderer.xr&&renderer.xr.addEventListener) renderer.xr.addEventListener('sessionend', endXR);
     function dismissOverlay(){ ui.classList.add('dim'); }
+    function showVRNote(m){ const h=document.getElementById('hint'); if(h){ h.textContent=m; h.style.color='#e8a04a'; } console.log('[VR] '+m); }
     if(navigator.xr){ navigator.xr.isSessionSupported('immersive-vr').then(ok=>{ vrAvailable=ok; enterBtn.textContent=ok?'Enter VR':'Enter \u2014 Desktop View'; }).catch(()=>{enterBtn.textContent='Enter \u2014 Desktop View';}); }
     else enterBtn.textContent='Enter \u2014 Desktop View';
-    enterBtn.addEventListener('click', async ()=>{ if(!vrAvailable){ dismissOverlay(); return; }
+    enterBtn.addEventListener('click', async ()=>{
+      if(!vrAvailable && navigator.xr){ try{ vrAvailable = await navigator.xr.isSessionSupported('immersive-vr'); }catch(_){} }
+      if(!navigator.xr || !vrAvailable){ showVRNote(!window.isSecureContext ? 'VR blocked: this page must be served over https:// (or localhost). Showing desktop view.' : 'Immersive VR not available on this browser — showing desktop view.'); dismissOverlay(); return; }
       try{ const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
         renderer.xr.setReferenceSpaceType('local-floor'); await renderer.xr.setSession(session); dismissOverlay();
         rig.position.set(0,0,0); camera.position.set(0,0,0); camera.rotation.set(0,0,0); xrSession=session; controllers.length=0;
@@ -507,7 +523,7 @@
           c.addEventListener('disconnected', ()=>{ c.userData.inputSource=null; });
           scene.add(c); controllers.push(c); }
         session.addEventListener('end', endXR);
-      }catch(err){ console.warn('VR session failed:',err); dismissOverlay(); }
+      }catch(err){ console.warn('VR session failed:',err); showVRNote('VR session failed: '+((err&&err.message)||err)+' — tap Enter to retry.'); }
     });
 
     // ---- loop ----
@@ -1301,6 +1317,41 @@
       for(;bi<BONDS;bi++) bondPool[bi].visible=false;
     }
     const clock=new THREE.Clock();
+    // ---------- in-app screenshots: capture current view -> PNG, copy/download from a gallery ----------
+    let _wantShot=false; const _shots=[];
+    function requestShot(){ _wantShot=true; }
+    function captureShot(){ const W=1280,H=720; let url=null;
+      const prevRT=renderer.getRenderTarget(), prevXR=renderer.xr.enabled;
+      try{ const src=(renderer.xr.isPresenting&&renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
+        const cam=new THREE.PerspectiveCamera(74,W/H,0.03,3000);
+        const pp=new THREE.Vector3(),qq=new THREE.Quaternion(),ss=new THREE.Vector3();
+        src.matrixWorld.decompose(pp,qq,ss); cam.position.copy(pp); cam.quaternion.copy(qq);
+        const rt=new THREE.WebGLRenderTarget(W,H,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+        renderer.xr.enabled=false; renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,cam);
+        const buf=new Uint8Array(W*H*4); renderer.readRenderTargetPixels(rt,0,0,W,H,buf); rt.dispose();
+        const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const cx=cv.getContext('2d');
+        const img=cx.createImageData(W,H); const rb=W*4;
+        for(let y=0;y<H;y++){ const sy=(H-1-y)*rb, dy=y*rb; for(let x=0;x<rb;x++) img.data[dy+x]=buf[sy+x]; }
+        cx.putImageData(img,0,0); url=cv.toDataURL('image/png');
+      }catch(err){ console.warn('capture failed',err); }
+      finally{ renderer.setRenderTarget(prevRT); renderer.xr.enabled=prevXR; }
+      return url; }
+    function renderGallery(){ const g=document.getElementById('capGallery'); if(!g) return;
+      g.style.display=_shots.length?'block':'none';
+      let h='<div class="ghd">Screenshots ('+_shots.length+') — Copy, then paste into chat</div>';
+      for(let i=0;i<_shots.length;i++){ h+='<div class="capShot"><img src="'+_shots[i]+'"/>'
+        +'<button class="capCopy" data-i="'+i+'">Copy</button>'
+        +'<a class="capDl" href="'+_shots[i]+'" download="eoe_shot_'+(i+1)+'.png">Download</a>'
+        +'<button class="capDel" data-i="'+i+'" title="delete">×</button></div>'; }
+      g.innerHTML=h;
+      g.querySelectorAll('.capCopy').forEach(b=>b.onclick=()=>copyShot(+b.getAttribute('data-i'),b));
+      g.querySelectorAll('.capDel').forEach(b=>b.onclick=()=>{ _shots.splice(+b.getAttribute('data-i'),1); renderGallery(); }); }
+    async function copyShot(i,btn){ try{ const blob=await (await fetch(_shots[i])).blob();
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        if(btn){ const o=btn.textContent; btn.textContent='Copied!'; setTimeout(()=>btn.textContent=o,1200); }
+      }catch(e){ alert('This browser blocked image-clipboard copy. Use Download instead, then attach the file in chat.'); } }
+    (function(){ const cb=document.getElementById('capBtn'); if(cb) cb.addEventListener('click',requestShot); })();
+    addEventListener('keydown',e=>{ if(e.code==='KeyP'&&!e.repeat) requestShot(); });
     function tick(){
       const dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime; desktopMove(dt); oU.uTime.value=t;
       if(cosmicWeb){ for(let i=0;i<cwGlows.length;i++){ const g=cwGlows[i]; g.material.opacity=cosmosLevel*g.userData.b*(0.7+0.3*Math.sin(t*0.6+g.userData.tw)); } }
@@ -1319,6 +1370,7 @@
           if(!c) c=controllers[si]||controllers[0]; if(!c) continue;
           const trig=!!(gp.buttons[0]&&gp.buttons[0].pressed); const grip=!!(gp.buttons[1]&&gp.buttons[1].pressed); const ud=c.userData;
           const menuBtn=!!(gp.buttons[4]&&gp.buttons[4].pressed); if(menuBtn&&!ud.menuPrev) toggleMenu(); ud.menuPrev=menuBtn;
+          const shotBtn=!!(gp.buttons[3]&&gp.buttons[3].pressed); if(shotBtn&&!ud.shotPrev) requestShot(); ud.shotPrev=shotBtn;  // thumbstick-click = screenshot
           if(menuVisible){ poseOf(c,_o,_d); ray.set(_o,_d.clone().normalize()); const mh=ray.intersectObject(menuPanel,false);
             if(mh.length&&mh[0].uv){ menuCursor.position.copy(mh[0].point); menuCursor.visible=true;
               const px=mh[0].uv.x*720, py=(1-mh[0].uv.y)*1100; let pick=inRect(px,py,menuRectS)?'sandbox':(inRect(px,py,menuRectT)?'table':(inRect(px,py,menuRectM)?'mol':(inRect(px,py,menuRectB)?'bench':(inRect(px,py,menuRectC)?'cell':null))));
@@ -1426,6 +1478,8 @@
       if(mode==='table' && showcase && !showcase.free && showcase.noble){ nobleHalo.visible=true; nobleHalo.position.set(showcase.center.x, showcase.center.y+showcase.radius*1.15*showcase.form, showcase.center.z); const hs=showcase.radius*4.3; nobleHalo.scale.set(hs,hs,1); nobleHalo.material.opacity=0.55*smoothstep(0.55,1.0,showcase.form); }
       else nobleHalo.visible=false;
       renderer.render(scene,camera);
+      if(_wantShot){ _wantShot=false; const u=captureShot(); if(u){ _shots.push(u); if(_shots.length>12) _shots.shift(); renderGallery();
+        const cb=document.getElementById('capBtn'); if(cb){ cb.classList.add('flash'); setTimeout(()=>cb.classList.remove('flash'),220); } } }
     }
     renderer.setAnimationLoop(tick);
     addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
