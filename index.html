@@ -663,18 +663,18 @@
       showcase=b; selZ=o[0]; drawInfo(o); infoPlane.visible=true; drawTable(); }
 
     // ================= MOLECULES MODE =================
-    const MOL=[{n:"Water",M:0.308,f:"H2O",note:"Oxygen offers 2 coupling positions in a bent ~104.5° geometry; the substrate's lowest-strain closure for two H.",a:"O,0,0,0,0.891;H,0.411,-0.318,0,0;H,-0.411,-0.318,0,0",b:"0,1,1;0,2,1"},
-{n:"Methane",M:0.41,f:"CH4",note:"Carbon's four coupling positions at the tetrahedral 109.5° — the substrate's natural 4-coordinate closure.",a:"C,0,0,0,0.846;H,0.3,0.3,0.3,0;H,0.3,-0.3,-0.3,0;H,-0.3,0.3,-0.3,0;H,-0.3,-0.3,0.3,0",b:"0,1,1;0,2,1;0,3,1;0,4,1"},
-{n:"Ammonia",M:0.378,f:"NH3",note:"Nitrogen: 3 coupling positions plus a lone pair — pyramidal, not flat. The lone pair is part of the closure.",a:"N,0,0.094,0,0.819;H,0.42,-0.153,0,0;H,-0.21,-0.153,0.364,0;H,-0.21,-0.153,-0.364,0",b:"0,1,1;0,2,1;0,3,1"},
-{n:"Carbon dioxide",M:0.498,f:"CO2",note:"O=C=O. Two double bonds, linear 180°. Each double bond is two coupling positions continuing through.",a:"C,0,0,0,0.846;O,0.624,0,0,0.891;O,-0.624,0,0,0.891",b:"0,1,2;0,2,2"},
+    const MOL=[{n:"Water",M:0.7343,sd:0.0003,r3d:1,f:"H2O",note:"Oxygen offers 2 coupling positions in a bent ~104.5° geometry; the substrate's lowest-strain closure for two H.",a:"O,0,0,0,0.891;H,0.411,-0.318,0,0;H,-0.411,-0.318,0,0",b:"0,1,1;0,2,1"},
+{n:"Methane",M:0.8047,sd:0.0022,r3d:1,f:"CH4",note:"Carbon's four coupling positions at the tetrahedral 109.5° — the substrate's natural 4-coordinate closure.",a:"C,0,0,0,0.846;H,0.3,0.3,0.3,0;H,0.3,-0.3,-0.3,0;H,-0.3,0.3,-0.3,0;H,-0.3,-0.3,0.3,0",b:"0,1,1;0,2,1;0,3,1;0,4,1"},
+{n:"Ammonia",M:0.8020,sd:0.0008,r3d:1,f:"NH3",note:"Nitrogen: 3 coupling positions plus a lone pair — pyramidal, not flat. The lone pair is part of the closure.",a:"N,0,0.094,0,0.819;H,0.42,-0.153,0,0;H,-0.21,-0.153,0.364,0;H,-0.21,-0.153,-0.364,0",b:"0,1,1;0,2,1;0,3,1"},
+{n:"Carbon dioxide",M:0.8355,sd:0.0012,r3d:1,f:"CO2",note:"O=C=O. Two double bonds, linear 180°. Each double bond is two coupling positions continuing through.",a:"C,0,0,0,0.846;O,0.624,0,0,0.891;O,-0.624,0,0,0.891",b:"0,1,2;0,2,2"},
 {n:"Benzene",M:0.791,f:"C6H6",note:"Six carbons, one delocalised ring — the aromatic closure. Coupling is shared around the whole loop, not pinned to pairs.",a:"C,0.702,0,0,0.846;C,0.351,0.608,0,0.846;C,-0.351,0.608,0,0.846;C,-0.702,0,0,0.846;C,-0.351,-0.608,0,0.846;C,0.351,-0.608,0,0.846;H,1.196,0,0,0;H,0.598,1.036,0,0;H,-0.598,1.036,0,0;H,-1.196,0,0,0;H,-0.598,-1.036,0,0;H,0.598,-1.036,0,0",b:"0,1,15;0,6,1;1,2,15;1,7,1;2,3,15;2,8,1;3,4,15;3,9,1;4,5,15;4,10,1;5,0,15;5,11,1"},
 {n:"Oxygen",M:0.434,f:"O2",note:"A double bond closing two oxygen closures into one. What you breathe.",a:"O,-0.312,0,0,0.891;O,0.312,0,0,0.891",b:"0,1,2"},
-{n:"Glycine",M:0.549,f:"C2H5NO2",note:"Simplest amino acid, R = H. The universal backbone with nothing extra — the minimal protein-forming closure.",a:"N,-0.398,0.355,-0.35,0.819;H,-0.487,0.753,-0.414,0;H,-0.616,0.251,-0.676,0;C,-0.077,0.07,-0.009,0.846;H,-0.424,-0.143,0.147,0;C,0.298,-0.199,0.068,0.846;O,0.632,-0.315,-0.186,0.891;O,0.474,-0.45,0.479,0.891;H,0.595,-0.748,0.701,0;H,0.003,0.424,0.24,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1"},
-{n:"Alanine",M:0.589,f:"C3H7NO2",note:"Smallest real side chain (R = CH3). Hydrophobic, helix-stabilising.",a:"N,-0.016,0.249,-0.399,0.819;H,0.144,0.653,-0.533,0;H,-0.093,0.244,-0.829,0;C,-0.104,-0.034,-0.033,0.846;H,-0.371,-0.322,-0.151,0;C,0.291,-0.379,0.12,0.846;O,0.331,-0.626,0.398,0.891;O,0.627,-0.528,-0.084,0.891;H,0.913,-0.749,-0.319,0;C,-0.316,0.261,0.31,0.846;H,-0.681,0.529,0.274,0;H,-0.566,0.121,0.658,0;H,-0.158,0.58,0.588,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1"},
-{n:"Serine",M:0.627,f:"C3H7NO3",note:"R = CH2OH. The hydroxyl's open coupling position is a phosphorylation site — a hook for further closure.",a:"N,0.221,0.288,-0.263,0.819;H,0.428,0.696,-0.259,0;H,0.315,0.357,-0.698,0;C,0.049,-0.034,0.042,0.846;H,-0.162,-0.388,-0.125,0;C,0.434,-0.388,0.187,0.846;O,0.631,-0.456,0.49,0.891;O,0.662,-0.636,-0.065,0.891;H,0.909,-0.925,-0.28,0;C,-0.456,0.188,0.257,0.846;H,-0.468,0.508,0.492,0;H,-0.674,-0.001,0.542,0;O,-0.801,0.338,-0.057,0.891;H,-1.087,0.452,-0.26,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,1"},
-{n:"Cysteine",M:0.66,f:"C3H7NO2S",note:"Sulfur-bearing (R = CH2SH). Two cysteines couple S–S into a disulfide — a closure that staples protein structure.",a:"N,0.221,0.288,-0.263,0.819;H,0.428,0.696,-0.259,0;H,0.315,0.357,-0.698,0;C,0.049,-0.034,0.042,0.846;H,-0.162,-0.388,-0.125,0;C,0.434,-0.388,0.187,0.846;O,0.631,-0.456,0.49,0.891;O,0.662,-0.636,-0.065,0.891;H,0.909,-0.925,-0.28,0;C,-0.456,0.188,0.257,0.846;H,-0.468,0.508,0.492,0;H,-0.674,-0.001,0.542,0;S,-0.801,0.338,-0.057,0.964;H,-1.087,0.452,-0.26,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,1"},
-{n:"Aspartate",M:0.686,f:"C4H7NO4",note:"Acidic side chain (R = CH2COOH). Its deprotonated carboxyl is the open position for salt-bridge closures.",a:"N,-0.44,-0.105,-0.533,0.819;H,-0.657,0.212,-0.759,0;H,-0.539,-0.296,-0.904,0;C,-0.235,-0.182,-0.079,0.846;H,-0.593,-0.426,0.004,0;C,0.121,-0.552,-0.026,0.846;O,0.104,-0.854,0.258,0.891;O,0.555,-0.774,-0.132,0.891;H,0.842,-0.984,-0.197,0;C,-0.189,0.218,0.226,0.846;H,-0.509,0.511,0.311,0;H,-0.268,0.172,0.659,0;C,0.169,0.55,0.237,0.846;O,0.252,0.826,-0.069,0.891;O,0.541,0.761,0.441,0.891;H,0.846,0.924,0.562,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,2;12,14,1;14,15,1"},
-{n:"Lysine",M:0.832,f:"C6H14N2O2",note:"Basic, long chain ending in NH2 (R = (CH2)4NH2). Positive at physiological pH; salt-bridges with acids.",a:"N,0.32,-0.234,0.91,0.819;H,0.242,-0.05,1.218,0;H,0.672,-0.12,0.993,0;C,0.039,-0.579,0.635,0.846;H,-0.178,-0.778,0.871,0;C,0.424,-0.887,0.653,0.846;O,0.465,-1.161,0.964,0.891;O,0.822,-1.125,0.549,0.891;H,1.119,-1.326,0.513,0;C,-0.445,-0.377,0.271,0.846;H,-0.645,-0.681,0.199,0;H,-0.705,-0.269,0.522,0;C,-0.546,-0.035,-0.24,0.846;H,-0.975,-0.023,-0.237,0;H,-0.597,-0.313,-0.527,0;C,-0.373,0.445,-0.512,0.846;H,-0.666,0.476,-0.817,0;H,-0.56,0.757,-0.31,0;C,-0.01,0.798,-0.786,0.846;H,-0.184,1.164,-0.902,0;H,0.088,0.648,-1.158,0;N,0.427,1.101,-0.896,0.819;H,0.729,1.246,-0.74,0;H,0.538,1.322,-1.175,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,1;12,14,1;12,15,1;15,16,1;15,17,1;15,18,1;18,19,1;18,20,1;18,21,1;21,22,1;21,23,1"},
+{n:"Glycine",M:0.8786,sd:0.0008,r3d:1,f:"C2H5NO2",note:"Simplest amino acid, R = H. The universal backbone with nothing extra — the minimal protein-forming closure.",a:"N,-0.398,0.355,-0.35,0.819;H,-0.487,0.753,-0.414,0;H,-0.616,0.251,-0.676,0;C,-0.077,0.07,-0.009,0.846;H,-0.424,-0.143,0.147,0;C,0.298,-0.199,0.068,0.846;O,0.632,-0.315,-0.186,0.891;O,0.474,-0.45,0.479,0.891;H,0.595,-0.748,0.701,0;H,0.003,0.424,0.24,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1"},
+{n:"Alanine",M:0.8785,sd:0.0007,r3d:1,f:"C3H7NO2",note:"Smallest real side chain (R = CH3). Hydrophobic, helix-stabilising.",a:"N,-0.016,0.249,-0.399,0.819;H,0.144,0.653,-0.533,0;H,-0.093,0.244,-0.829,0;C,-0.104,-0.034,-0.033,0.846;H,-0.371,-0.322,-0.151,0;C,0.291,-0.379,0.12,0.846;O,0.331,-0.626,0.398,0.891;O,0.627,-0.528,-0.084,0.891;H,0.913,-0.749,-0.319,0;C,-0.316,0.261,0.31,0.846;H,-0.681,0.529,0.274,0;H,-0.566,0.121,0.658,0;H,-0.158,0.58,0.588,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1"},
+{n:"Serine",M:0.8732,sd:0.0008,r3d:1,f:"C3H7NO3",note:"R = CH2OH. The hydroxyl's open coupling position is a phosphorylation site — a hook for further closure.",a:"N,0.221,0.288,-0.263,0.819;H,0.428,0.696,-0.259,0;H,0.315,0.357,-0.698,0;C,0.049,-0.034,0.042,0.846;H,-0.162,-0.388,-0.125,0;C,0.434,-0.388,0.187,0.846;O,0.631,-0.456,0.49,0.891;O,0.662,-0.636,-0.065,0.891;H,0.909,-0.925,-0.28,0;C,-0.456,0.188,0.257,0.846;H,-0.468,0.508,0.492,0;H,-0.674,-0.001,0.542,0;O,-0.801,0.338,-0.057,0.891;H,-1.087,0.452,-0.26,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,1"},
+{n:"Cysteine",M:0.8877,sd:0.0007,r3d:1,f:"C3H7NO2S",note:"Sulfur-bearing (R = CH2SH). Two cysteines couple S–S into a disulfide — a closure that staples protein structure.",a:"N,0.221,0.288,-0.263,0.819;H,0.428,0.696,-0.259,0;H,0.315,0.357,-0.698,0;C,0.049,-0.034,0.042,0.846;H,-0.162,-0.388,-0.125,0;C,0.434,-0.388,0.187,0.846;O,0.631,-0.456,0.49,0.891;O,0.662,-0.636,-0.065,0.891;H,0.909,-0.925,-0.28,0;C,-0.456,0.188,0.257,0.846;H,-0.468,0.508,0.492,0;H,-0.674,-0.001,0.542,0;S,-0.801,0.338,-0.057,0.964;H,-1.087,0.452,-0.26,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,1"},
+{n:"Aspartate",M:0.8932,sd:0.0008,r3d:1,f:"C4H7NO4",note:"Acidic side chain (R = CH2COOH). Its deprotonated carboxyl is the open position for salt-bridge closures.",a:"N,-0.44,-0.105,-0.533,0.819;H,-0.657,0.212,-0.759,0;H,-0.539,-0.296,-0.904,0;C,-0.235,-0.182,-0.079,0.846;H,-0.593,-0.426,0.004,0;C,0.121,-0.552,-0.026,0.846;O,0.104,-0.854,0.258,0.891;O,0.555,-0.774,-0.132,0.891;H,0.842,-0.984,-0.197,0;C,-0.189,0.218,0.226,0.846;H,-0.509,0.511,0.311,0;H,-0.268,0.172,0.659,0;C,0.169,0.55,0.237,0.846;O,0.252,0.826,-0.069,0.891;O,0.541,0.761,0.441,0.891;H,0.846,0.924,0.562,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,2;12,14,1;14,15,1"},
+{n:"Lysine",M:0.8783,sd:0.0007,r3d:1,f:"C6H14N2O2",note:"Basic, long chain ending in NH2 (R = (CH2)4NH2). Positive at physiological pH; salt-bridges with acids.",a:"N,0.32,-0.234,0.91,0.819;H,0.242,-0.05,1.218,0;H,0.672,-0.12,0.993,0;C,0.039,-0.579,0.635,0.846;H,-0.178,-0.778,0.871,0;C,0.424,-0.887,0.653,0.846;O,0.465,-1.161,0.964,0.891;O,0.822,-1.125,0.549,0.891;H,1.119,-1.326,0.513,0;C,-0.445,-0.377,0.271,0.846;H,-0.645,-0.681,0.199,0;H,-0.705,-0.269,0.522,0;C,-0.546,-0.035,-0.24,0.846;H,-0.975,-0.023,-0.237,0;H,-0.597,-0.313,-0.527,0;C,-0.373,0.445,-0.512,0.846;H,-0.666,0.476,-0.817,0;H,-0.56,0.757,-0.31,0;C,-0.01,0.798,-0.786,0.846;H,-0.184,1.164,-0.902,0;H,0.088,0.648,-1.158,0;N,0.427,1.101,-0.896,0.819;H,0.729,1.246,-0.74,0;H,0.538,1.322,-1.175,0",b:"0,1,1;0,2,1;0,3,1;3,4,1;3,5,1;5,6,2;5,7,1;7,8,1;3,9,1;9,10,1;9,11,1;9,12,1;12,13,1;12,14,1;12,15,1;15,16,1;15,17,1;15,18,1;18,19,1;18,20,1;18,21,1;21,22,1;21,23,1"},
 {n:"Ethanol",M:0.578,f:"C2H6O",note:"Two carbons and a hydroxyl. The OH carries the polar coupling that makes it mix with water.",a:"C,-0.349,0.095,-0.023,0.846;C,0.184,0.047,0.057,0.846;H,-0.506,0.112,-0.408,0;H,-0.576,0.391,0.154,0;H,-0.632,-0.221,0.123,0;H,0.421,0.399,-0.117,0;H,0.305,0.117,0.451,0;O,0.459,-0.277,-0.074,0.891;H,0.694,-0.662,-0.161,0",b:"0,1,1;0,2,1;0,3,1;0,4,1;1,5,1;1,6,1;1,7,1;7,8,1"},
 {n:"Acetic acid",M:0.558,f:"C2H4O2",note:"A methyl plus a carboxyl. The carboxyl is a double bond and a hydroxyl sharing one carbon — the acid closure.",a:"C,-0.316,-0.081,-0.019,0.846;C,0.193,0.016,-0.124,0.846;H,-0.569,-0.133,-0.394,0;H,-0.566,0.244,0.142,0;H,-0.462,-0.411,0.18,0;O,0.411,-0.054,-0.454,0.891;O,0.496,0.128,0.184,0.891;H,0.813,0.291,0.483,0",b:"0,1,1;0,2,1;0,3,1;0,4,1;1,5,2;1,6,1;6,7,1"},
 {n:"Glucose",M:0.814,f:"C6H12O6",note:"Six-membered sugar ring (five carbons and an oxygen) hung with hydroxyls. Cellular fuel — a ring closure the body unwinds for energy.",a:"C,-0.592,-0.035,0.232,0.846;C,-0.514,0.019,-0.316,0.846;C,-0.092,0.283,-0.502,0.846;C,0.299,0.353,-0.091,0.846;C,0.331,-0.088,0.319,0.846;O,-0.124,-0.084,0.325,0.891;C,0.677,-0.537,0.468,0.846;H,0.953,-0.467,0.711,0;H,0.931,-0.677,0.222,0;O,0.711,-0.919,0.634,0.891;H,0.8,-1.288,0.805,0;H,-0.848,-0.275,0.359,0;H,-0.868,0.159,-0.45,0;H,0.092,0.134,-0.854,0;H,0.266,0.673,0.128,0;H,0.471,0.071,0.645,0;O,-0.877,0.241,0.508,0.891;H,-1.097,0.42,0.711,0;O,-0.699,-0.355,-0.553,0.891;H,-0.881,-0.661,-0.795,0;O,-0.172,0.602,-0.877,0.891;H,-0.229,0.822,-1.145,0;O,0.599,0.644,-0.197,0.891;H,0.865,0.964,-0.285,0",b:"0,1,1;1,2,1;2,3,1;3,4,1;4,5,1;5,0,1;4,6,1;6,7,1;6,8,1;6,9,1;9,10,1;0,11,1;1,12,1;2,13,1;3,14,1;4,15,1;0,16,1;16,17,1;1,18,1;18,19,1;2,20,1;20,21,1;3,22,1;22,23,1"},
@@ -720,7 +720,8 @@
         msctx.fillStyle='#0a0e16'; msctx.textAlign='left'; msctx.font='600 38px system-ui, sans-serif'; msctx.fillText(m.n,c.x+22,c.y+58);
         msctx.font='500 30px system-ui, sans-serif'; msctx.fillStyle='rgba(10,14,22,0.82)'; msctx.fillText(m.f,c.x+22,c.y+104);
         { const Mv=(m.M!=null?m.M:0); msctx.textAlign='right'; msctx.font='700 26px system-ui, sans-serif'; msctx.fillStyle='rgba(10,14,22,0.92)'; msctx.fillText('M '+(Mv>=0?'+':'')+Mv.toFixed(2), c.x+mcw-22, c.y+104); msctx.textAlign='left';
-          const bx=c.x+22, by=c.y+122, bw=mcw-44, bh=9; msctx.fillStyle='rgba(10,14,22,0.30)'; rrect(msctx,bx,by,bw,bh,4); msctx.fill(); msctx.fillStyle='#ecb74e'; rrect(msctx,bx,by,bw*clamp01(Mv/0.95),bh,4); msctx.fill(); } }
+          const bx=c.x+22, by=c.y+122, bw=mcw-44, bh=9; msctx.fillStyle='rgba(10,14,22,0.30)'; rrect(msctx,bx,by,bw,bh,4); msctx.fill(); msctx.fillStyle='#ecb74e'; rrect(msctx,bx,by,bw*clamp01(Mv/0.95),bh,4); msctx.fill(); }
+        msctx.textAlign='right'; msctx.font='700 16px system-ui, sans-serif'; msctx.fillStyle=m.r3d?'rgba(126,178,127,0.95)':'rgba(160,180,210,0.5)'; msctx.fillText(m.r3d?'real 3D \u00b7 N=5':'earlier calib.', c.x+mcw-20, c.y+32); msctx.textAlign='left'; }
       mstex.needsUpdate=true; }
 
     // molecule info plane (reuse the info-panel look)
@@ -740,12 +741,12 @@
       const bn={1:'single',2:'double',3:'triple',15:'aromatic',4:'peptide'}; const bc={}; m.bonds.forEach(b=>bc[b.o]=(bc[b.o]||0)+1);
       y+=46; mictx.font='400 26px system-ui, sans-serif'; mictx.fillStyle='#cdd9ef'; mictx.fillText(Object.keys(bc).map(k=>bc[k]+' '+bn[k]).join('    '),46,y);
       y+=66; mictx.fillStyle='#7fb27f'; mictx.font='600 27px system-ui, sans-serif'; mictx.fillText('\u2713 closure holds \u2014 measured on the substrate',46,y);
-      y+=50; mictx.fillStyle='#e7eefc'; mictx.font='600 30px system-ui, sans-serif'; mictx.fillText('substrate-sustained  M = '+(Mv>=0?'+':'')+Mv.toFixed(3),46,y);
+      y+=50; mictx.fillStyle='#e7eefc'; mictx.font='600 30px system-ui, sans-serif'; mictx.fillText('substrate-sustained  M = '+(Mv>=0?'+':'')+Mv.toFixed(m.r3d?4:3)+(m.sd!=null?'  \u00b1 '+m.sd.toFixed(4):''),46,y);
       y+=20; { const bx=46,bw=MIW-92,bh=16; mictx.fillStyle='rgba(74,144,212,0.18)'; rrect(mictx,bx,y,bw,bh,8); mictx.fill(); mictx.fillStyle='#ecb74e'; rrect(mictx,bx,y,bw*clamp01(Mv/0.95),bh,8); mictx.fill(); } y+=10;
       y+=56; mictx.fillStyle='#9fb3d6'; mictx.font='300 28px system-ui, sans-serif';
       const words=(m.note||'').split(' '); let line='',yy=y; const maxw=MIW-96;
       for(const w of words){ const test=line?line+' '+w:w; if(mictx.measureText(test).width>maxw){ mictx.fillText(line,46,yy); line=w; yy+=40; } else line=test; } mictx.fillText(line,46,yy);
-      mictx.fillStyle='#5f7299'; mictx.font='300 21px system-ui, sans-serif'; mictx.fillText('Measured: evolved on a 128\u00b3 substrate lattice under M = \u03c7s \u2212 \u03bb (400 steps).', 46, MIH-46);
+      mictx.fillStyle=m.r3d?'#7fb27f':'#5f7299'; mictx.font='300 21px system-ui, sans-serif'; mictx.fillText(m.r3d?'Measured: real 3D conformer (RDKit ETKDG), 128\u00b3 lattice, 400 steps, N=5 seeds.':'Earlier flat-rasterizer calibration \u2014 not yet re-measured in real 3D.', 46, MIH-46);
       mitex.needsUpdate=true; }
 
     function buildMolecule(idx){ if(idx<0||idx>=MOL.length) return; curMol=MOL[idx]; molSel=idx; molSpin=0;
@@ -831,10 +832,11 @@
 
     // curated products (already-measured molecules carry their substrate M)
     const PROD = {
-      'H|O':  {name:'Water', f:'H\u2082O', spec:'H2O', M:0.308},
+      'H|O':  {name:'Water', f:'H\u2082O', spec:'H2O', M:0.7343, sd:0.0003},
       'H|H':  {name:'Dihydrogen', f:'H\u2082', spec:'H2', M:null},
-      'C|O':  {name:'Carbon dioxide', f:'CO\u2082', spec:'CO2', M:0.498},
-      'H|N':  {name:'Ammonia', f:'NH\u2083', spec:'NH3', M:0.378, conceptual:'takes three H per N'},
+      'C|H':  {name:'Methane', f:'CH\u2084', spec:'CH4', M:0.8047, sd:0.0022, conceptual:'four H at the tetrahedral 109.5\u00b0'},
+      'C|O':  {name:'Carbon dioxide', f:'CO\u2082', spec:'CO2', M:0.8355, sd:0.0012},
+      'H|N':  {name:'Ammonia', f:'NH\u2083', spec:'NH3', M:0.8020, sd:0.0008, conceptual:'takes three H per N'},
       'H|F':  {name:'Hydrogen fluoride', f:'HF', spec:'HF', M:null},
       'Cl|Na':{name:'Sodium chloride', f:'NaCl', spec:'NaCl', M:null},
       'F|Na': {name:'Sodium fluoride', f:'NaF', spec:'NaF', M:null},
@@ -843,11 +845,13 @@
 
     SPEC.NaOH ={kind:'curve', curve:[[300,0.92],[400,0.95],[500,0.96],[600,0.96],[700,0.95],[800,0.94]], uv:'A clear, caustic solution \u2014 no visible feature; it eats fats and skin.', label:'Sodium hydroxide'};
     SPEC.H2CO3={kind:'curve', curve:[[300,0.93],[400,0.96],[500,0.97],[600,0.96],[700,0.95],[800,0.93]], uv:'Carbonated water \u2014 colourless and weakly acidic.', label:'Carbonic acid'};
+    SPEC.CH4 ={kind:'curve', curve:[[300,0.97],[400,0.98],[500,0.98],[600,0.98],[700,0.98],[800,0.96]], uv:'Colourless, odourless across the visible \u2014 but a potent absorber out in the IR (3.3 \u00b5m, 7.7 \u00b5m). Another greenhouse band that lives where you can\u2019t see.', label:'Methane'};
     const PRODUCT_REAG = {
       H2O:  {sym:'H\u2082O',  name:'Water',            pos:2, en:3.0, cls:'polar',        spec:'H2O',  mol:true},
       CO2:  {sym:'CO\u2082',  name:'Carbon dioxide',   pos:1, en:2.8, cls:'acidic_oxide', spec:'CO2',  mol:true},
       H2:   {sym:'H\u2082',   name:'Dihydrogen',       pos:1, en:2.2, cls:'nonmetal',     spec:'H2',   mol:true},
       NH3:  {sym:'NH\u2083',  name:'Ammonia',          pos:1, en:2.6, cls:'base',         spec:'NH3',  mol:true},
+      CH4:  {sym:'CH\u2084',  name:'Methane',          pos:0, en:2.3, cls:'nonpolar',     spec:'CH4',  mol:true},
       HF:   {sym:'HF',        name:'Hydrogen fluoride',pos:1, en:3.5, cls:'acid',         spec:'HF',   mol:true},
       NaCl: {sym:'NaCl',      name:'Sodium chloride',  pos:0, en:0.0, cls:'salt',         spec:'NaCl', mol:true},
       NaF:  {sym:'NaF',       name:'Sodium fluoride',  pos:0, en:0.0, cls:'salt',         spec:'NaF',  mol:true},
@@ -857,7 +861,7 @@
     };
     PROD['H2O|Na'] = {name:'Sodium hydroxide + hydrogen', f:'NaOH + H\u2082', spec:'NaOH', M:null, note:'sodium tears the H from water'};
     PROD['CO2|H2O']= {name:'Carbonic acid', f:'H\u2082CO\u2083', spec:'H2CO3', M:null};
-    PROD['H2|O']   = {name:'Water', f:'H\u2082O', spec:'H2O', M:0.308, note:'combustion \u2014 hydrogen burns to water'};
+    PROD['H2|O']   = {name:'Water', f:'H\u2082O', spec:'H2O', M:0.7343, sd:0.0003, note:'combustion \u2014 hydrogen burns to water'};
     PROD['F|H2']   = {name:'Hydrogen fluoride', f:'HF', spec:'HF', M:null, note:'explosive even in the dark'};
     function getReagent(k){ return REAG[k] || PRODUCT_REAG[k] || null; }
     const madeProducts=[];
@@ -1007,7 +1011,7 @@
       else if(r.couples){ x.fillStyle=r.violent?'#e8a04a':'#7fb27f'; x.font='600 30px system-ui, sans-serif';
         x.fillText((r.violent?'\u26a1 reacts hard \u2014 ':'\u2713 they couple \u2014 ')+(r.kind==='ionic'?'ionic closure':'covalent closure'),44,y); y+=46;
         if(r.product){ x.fillStyle='#e7eefc'; x.font='500 34px system-ui, sans-serif'; x.fillText('\u2192  '+r.product.name+'   '+r.product.f,44,y); y+=44;
-          if(r.product.M!=null){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('substrate-sustained  M = +'+r.product.M.toFixed(3)+'  (measured on the 128\u00b3 lattice)',44,y); y+=38; }
+          if(r.product.M!=null){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('substrate-sustained  M = +'+r.product.M.toFixed(4)+(r.product.sd!=null?'  \u00b1 '+r.product.sd.toFixed(4)+'  (N=5)':'')+'   \u00b7   real 3D, 128\u00b3 lattice',44,y); y+=38; }
           if(r.product.conceptual){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.conceptual+')',44,y); y+=34; }
           if(r.product.note){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.note+')',44,y); y+=34; } }
       } else if(r.kind==='uncurated'){ x.fillStyle='#9fb3d6'; x.font='600 28px system-ui, sans-serif'; x.fillText('\u2014 beyond the curated set',44,y); y+=44;
@@ -1086,10 +1090,12 @@
     // sigma = RESERVE (stored order). surplus fills it, deficit drains it. phi(matter) is left behind.
     //   alive : M>=0, throughput covers maintenance, reserve full
     //   dying : M<0 the instant feed stops, but reserve COASTS down -> reversible until spent
-    //   husk  : reserve spent, order gone, MATTER REMAINS (inert; returns to flow only by a decomposer)
-    const CELL={ chi:1.0, Jfed:0.6, lam:0.18, center:new THREE.Vector3(0,1.6,-3.0) };
+    //   dead  : reserve spent. integration gone -> AUTOLYSIS: the homeostatic flow-body (lumen)
+    //           self-digests from the inside; only the committed scaffold (membrane wall) survives.
+    //   husk  : the committed scaffold alone -- inert ghost; returns to flow only by an outside decomposer
+    const CELL={ chi:1.0, Jfed:0.6, lam:0.18, autoRate:0.10, center:new THREE.Vector3(0,1.6,-3.0) };
     const cellGroup=new THREE.Group(); cellGroup.visible=false; scene.add(cellGroup);
-    let cellState={ sigma:0.0, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0 };
+    let cellState={ sigma:0.0, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0, autolysis:0 };
 
     function cellSoftTex(){ const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d');
       const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.45,'rgba(255,255,255,0.4)'); g.addColorStop(1,'rgba(255,255,255,0)');
@@ -1116,7 +1122,7 @@
     const cellInfo=new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95*CIH/CIW), new THREE.MeshBasicMaterial({map:ctex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     cellInfo.renderOrder=16; cellInfo.position.set(1.95,1.7,-2.55); cellInfo.rotation.y=-0.45; cellInfo.visible=false; cellGroup.add(cellInfo);
 
-    function cellReset(){ cellState={ sigma:0.98, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0 }; refreshCellBtns(); drawCellInfo(); }
+    function cellReset(){ cellState={ sigma:0.98, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0, autolysis:0 }; refreshCellBtns(); drawCellInfo(); }
     function cellSetFed(f){ if(cellState.deadAt!=null) return; cellState.fed=f; refreshCellBtns(); }
 
     function drawCellInfo(){ const x=cctx, S=cellState; x.clearRect(0,0,CIW,CIH);
@@ -1125,7 +1131,7 @@
       const J=(S.fed&&S.deadAt==null)?CELL.Jfed:0, M=CELL.chi*J-CELL.lam;
       x.textAlign='left'; x.fillStyle='#e7eefc'; x.font='400 46px Georgia, serif'; x.fillText('Single Cell',44,84);
       // state word
-      let word,col; if(S.deadAt!=null){ word='dead — husk'; col='#6fb0e0'; }
+      let word,col; if(S.deadAt!=null){ word=(S.autolysis<0.95?'dead — autolyzing':'husk — scaffold'); col='#6fb0e0'; }
       else if(M>=0){ word='alive'; col='#7fb27f'; } else { word='dying'; col='#e8a04a'; }
       x.fillStyle=col; x.font='600 40px system-ui, sans-serif'; x.fillText(word,44,148);
       // M = chi s - lam, the books
@@ -1141,7 +1147,7 @@
       x.fillText('throughput: '+((S.fed&&S.deadAt==null)?'incubator feeding (s = '+CELL.Jfed.toFixed(2)+')':'incubator cut (s = 0)'),44,392);
       // honest line
       x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif';
-      const note = S.deadAt!=null ? 'Reserve spent, order gone. The matter stays \u2014 an inert husk. It returns to the flow only when something breaks it down.'
+      const note = S.deadAt!=null ? (S.autolysis<0.95 ? 'Reserve spent. Integration gone, the flow-body now digests itself from the inside \u2014 autolysis eats the homeostatic part down to the committed scaffold.' : 'Only the committed scaffold remains \u2014 the inert ghost. It returns to the flow only when something outside breaks it down.')
         : (M>=0 ? 'Throughput covers maintenance. The gradient is held actively; surplus banks into reserve.'
                 : 'Income stopped, the books went red instantly \u2014 but the reserve coasts down. Feed it again before it empties and it recovers.');
       const ws=note.split(' '); let ln='',yy=440; const mw=CIW-90;
@@ -1156,14 +1162,20 @@
       if(S.sigma<=0.02 && S.deadAt==null){ S.deadAt=t; if(mode==='cell') drawCtrl(); }
       // colour by structural state (sigma); books (M) drive the readout, not the colour
       const sg=S.sigma; const alive = S.deadAt==null;
+      // AUTOLYSIS: once dead, integration is gone and the flow-body digests itself from the inside.
+      // The committed scaffold (membrane) is inert to it and remains as the husk.
+      if(!alive){ S.autolysis = clamp01(S.autolysis + dt*CELL.autoRate); }
+      const au = S.autolysis;
       lumMat.color.copy(_husk).lerp(_gold, alive?sg:0.0);
-      lumMat.opacity = 0.06 + 0.30*sg;
+      lumMat.opacity = alive ? (0.06 + 0.30*sg) : 0.30*(1-au);   // flow-body fades as it is consumed
+      lumPts.visible = alive || au < 0.999;
       memMat.color.copy(_wallHusk).lerp(_gold, alive?clamp01(0.3+0.7*sg):0.15);
-      memMat.opacity = alive ? 0.95 : 0.4;
+      memMat.opacity = alive ? 0.95 : 0.4;                       // committed scaffold survives as the ghost
       // heartbeat — pulse rate tracks reserve; none when dead
       const rate = alive ? (0.6+2.2*sg) : 0; S.pulse += dt*rate;
       const beat = 1 + (alive?0.05*sg:0)*Math.sin(S.pulse*2*Math.PI);
-      lumPts.scale.setScalar(beat); memPts.scale.setScalar(1+(alive?0.012*sg:0)*Math.sin(S.pulse*2*Math.PI));
+      lumPts.scale.setScalar(alive ? beat : (1 + 1.2*au));        // dead: flow-body swells & disperses as it self-digests
+      memPts.scale.setScalar(1+(alive?0.012*sg:0)*Math.sin(S.pulse*2*Math.PI));
       if(alive && rate>0){ const cyc=Math.floor(S.pulse); if(cyc>S.wc){ S.wc=cyc; emitWavefront(CELL.center.x,CELL.center.y,CELL.center.z, 1.1, clamp01(0.25+0.5*sg)); } }
       if((Math.floor(t*12)&3)===0) drawCellInfo(); }
 
