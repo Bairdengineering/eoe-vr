@@ -886,6 +886,20 @@
     function getReagent(k){ return REAG[k] || PRODUCT_REAG[k] || null; }
     const madeProducts=[];
 
+    // ---- measured baselines (real3d_measure committed standard; reproducible) ----
+    const ZOO_LIB={H2O:{n:'Water',h:0.4767,c:0.8415}, CH4:{n:'Methane',h:0.5342,c:0.851}, NH3:{n:'Ammonia',h:0.5102,c:0.8448}, CO2:{n:'Carbon dioxide',h:0.5631,c:0.8605}, C6H6:{n:'Benzene',h:0.7283,c:0.8996}, O2:{n:'Oxygen',h:0.5225,c:0.8576}, C2H5NO2:{n:'Glycine',h:0.6889,c:0.8961}, C3H7NO2:{n:'Alanine',h:0.7071,c:0.8987}, C3H7NO3:{n:'Serine',h:0.7146,c:0.8995}, C3H7NO2S:{n:'Cysteine',h:0.6785,c:0.9025}, C4H7NO4:{n:'Aspartate',h:0.7251,c:0.9024}, C6H14N2O2:{n:'Lysine',h:0.737,c:0.9049}, C2H6O:{n:'Ethanol',h:0.659,c:0.8868}, C2H4O2:{n:'Acetic acid',h:0.6653,c:0.8882}, C6H12O6:{n:'Glucose',h:0.7632,c:0.9095}, C5H5N5:{n:'Adenine',h:0.7551,c:0.9154}, C5H10N2O3:{n:'Gly-Ala (dipeptide)',h:0.7281,c:0.9017}, C8H15N3O5:{n:'Gly-Ala-Ser (tripeptide)',h:0.7433,c:0.9052}, C8H16O2:{n:'Octanoic acid (lipid)',h:0.73,c:0.8982}};
+    // ---- coupling-position closure: derive what two atoms form by filling valence ----
+    function parseFormula(f){ let m,re=/([A-Z][a-z]?)(\d*)/g,out={}; while((m=re.exec(f))){ if(!m[1])continue; out[m[1]]=(out[m[1]]||0)+(m[2]?parseInt(m[2],10):1);} return out; }
+    function sameComp(a,b){ const ka=Object.keys(a),kb=Object.keys(b); if(ka.length!==kb.length)return false; for(const k of ka){ if(a[k]!==b[k])return false; } return true; }
+    function recogniseComp(comp){ for(const spec in ZOO_LIB){ if(sameComp(comp,parseFormula(spec))) return {spec:spec,name:ZOO_LIB[spec].n,husk:ZOO_LIB[spec].h,committed:ZOO_LIB[spec].c}; } return null; }
+    function compFormula(c){ const k=Object.keys(c); k.sort((x,y)=>((x==='C')?-2:(x==='H')?-1:0)-((y==='C')?-2:(y==='H')?-1:0)); return k.map(e=>e+(c[e]>1?c[e]:'')).join(''); }
+    function deriveAtomClosure(ak,bk){ const a=REAG[ak],b=REAG[bk]; if(!a||!b)return null; const va=a.pos,vb=b.pos;
+      if(va===0||vb===0)return {inert:true}; let comp={};
+      if(va===1&&vb===1){ if(ak===bk)comp[ak]=2; else {comp[ak]=1;comp[bk]=1;} }
+      else if(va===1||vb===1){ const hub=va>vb?ak:bk,lig=va>vb?bk:ak,n=Math.max(va,vb); comp[hub]=1; comp[lig]=n; }
+      else return {multiBond:true};
+      return {closed:true, composition:comp}; }
+
     // the gate: read at the valence scale, NOT nuclear M
     function reactRead(ak,bk){
       const a=getReagent(ak), b=getReagent(bk); const key=[ak,bk].sort().join('|');
@@ -907,7 +921,15 @@
       }
       const dEN=Math.abs(a.en-b.en);
       const ionic = dEN>=1.7 && ((a.cls==='metal'&&b.cls==='nonmetal')||(b.cls==='metal'&&a.cls==='nonmetal'));
-      const p=PROD[key]||null;
+      let p=PROD[key]||null;
+      // coupling-position derivation: uncurated ATOM+ATOM pairs now form a closure
+      // instead of dead-ending. recognised closures carry their measured baseline.
+      if(!p && !molInvolved){ const dc=deriveAtomClosure(ak,bk);
+        if(dc && dc.closed){ const rec=recogniseComp(dc.composition);
+          p = rec ? {name:rec.name, f:rec.spec, spec:rec.spec, M:null, husk:rec.husk, committed:rec.committed, measured:true, derived:true}
+                  : {name:'Closure '+compFormula(dc.composition), f:compFormula(dc.composition), spec:compFormula(dc.composition), M:null, measured:false, derived:true}; } }
+      // attach the reproducible baseline to ANY product that's in the measured library
+      if(p && p.spec && ZOO_LIB[p.spec]){ p=Object.assign({}, p, {husk:ZOO_LIB[p.spec].h, committed:ZOO_LIB[p.spec].c, measured:true}); }
       if(molInvolved && !p){ return {couples:false, kind:'uncurated',
         reason:a.name+' + '+b.name+': both carry open coupling positions, so they likely react \u2014 but this product is beyond the curated, measured set, and the bench will not invent one it cannot stand behind.'}; }
       const violent = (a.sym==='F'||b.sym==='F');
@@ -969,7 +991,7 @@
     let benchA='H', benchB='O', benchResult=null;
     let bphase='idle', bt=0, bWaveDone=false;
 
-    function tintFor(specKey){ const c=lensHuman(SPEC[specKey]); // lift dark colours so additive blobs stay visible
+    function tintFor(specKey){ if(!SPEC[specKey]) return [0.62,0.72,0.85]; const c=lensHuman(SPEC[specKey]); // lift dark colours so additive blobs stay visible
       const mx=Math.max(c[0],c[1],c[2]); const lift=mx<0.5?0.5/Math.max(mx,0.05):1; return [clamp01(c[0]*lift),clamp01(c[1]*lift),clamp01(c[2]*lift)]; }
 
     function placeReagents(){
