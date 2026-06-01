@@ -922,13 +922,18 @@
       const dEN=Math.abs(a.en-b.en);
       const ionic = dEN>=1.7 && ((a.cls==='metal'&&b.cls==='nonmetal')||(b.cls==='metal'&&a.cls==='nonmetal'));
       let p=PROD[key]||null;
-      // coupling-position derivation: uncurated ATOM+ATOM pairs now form a closure
-      // instead of dead-ending. recognised closures carry their measured baseline.
+      // coupling-position derivation: an uncurated ATOM+ATOM pair forms a valid closure
+      // we can NAME, but only render it if we actually have a spectrum for it. With no
+      // spectrum/baseline we say so in text rather than fake a product (which broke the
+      // render loop). recognised+renderable closures still carry their measured baseline.
       if(!p && !molInvolved){ const dc=deriveAtomClosure(ak,bk);
-        if(dc && dc.closed){ const rec=recogniseComp(dc.composition);
-          p = rec ? {name:rec.name, f:rec.spec, spec:rec.spec, M:null, husk:rec.husk, committed:rec.committed, measured:true, derived:true}
-                  : {name:'Closure '+compFormula(dc.composition), f:compFormula(dc.composition), spec:compFormula(dc.composition), M:null, measured:false, derived:true}; } }
-      // attach the reproducible baseline to ANY product that's in the measured library
+        if(dc && dc.closed){ const rec=recogniseComp(dc.composition); const spec=rec?rec.spec:compFormula(dc.composition);
+          if(SPEC[spec]){ p={name:rec?rec.name:('Closure '+spec), f:spec, spec:spec, M:null,
+                              husk:rec?rec.husk:null, committed:rec?rec.committed:null, measured:!!rec, derived:true}; }
+          else { return {couples:false, kind:'derived',
+            reason:a.name+' + '+b.name+' fill their coupling positions into '+(rec?rec.name:spec)+
+                   ' \u2014 a valid closure, but beyond the measured/rendered set here, so the bench names it without standing behind a spectrum or baseline.'}; } } }
+      // attach the reproducible baseline to ANY renderable product that's in the library
       if(p && p.spec && ZOO_LIB[p.spec]){ p=Object.assign({}, p, {husk:ZOO_LIB[p.spec].h, committed:ZOO_LIB[p.spec].c, measured:true}); }
       if(molInvolved && !p){ return {couples:false, kind:'uncurated',
         reason:a.name+' + '+b.name+': both carry open coupling positions, so they likely react \u2014 but this product is beyond the curated, measured set, and the bench will not invent one it cannot stand behind.'}; }
@@ -1071,6 +1076,7 @@
       x.fillText(lens.kind==='human'?'three cone curves integrated to the colour your eye builds':'the whole distribution laid out — including the bands you can\u2019t see', 44, y+24); y+=54;
 
       function panelFor(specKey,title){ const spec=SPEC[specKey];
+        if(!spec){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText(title+'  \u2014  (no spectrum on file for this closure)',44,y); y+=40; return; }
         x.fillStyle='#cdd9ef'; x.font='400 23px system-ui, sans-serif'; x.fillText(title+'  \u2014  '+spec.label, 44, y); y+=14;
         drawStrip(x, spec, 44, y, BIW-88, 70); y+=70+64;
         if(lens.kind==='human'){ const c=lensHuman(spec); x.fillStyle='rgba(255,255,255,0.25)'; x.fillRect(44,y-8,150,54);
