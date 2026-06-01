@@ -491,18 +491,22 @@
 
     // ---- VR / overlay ----
     const ui=document.getElementById('ui'), enterBtn=document.getElementById('enter'); let controllers=[]; let vrAvailable=false; let xrSession=null;
+    // Robust XR teardown: clears the session, stops input, re-shows the overlay. Bound to three.js's
+    // sessionend (fires even when the headset reboots mid-session and the raw session 'end' is skipped).
+    function endXR(){ xrSession=null; vrDiag=''; for(const c of controllers){ if(c&&c.userData) c.userData.inputSource=null; } controllers.length=0; ui.classList.remove('dim'); }
+    if(renderer&&renderer.xr&&renderer.xr.addEventListener) renderer.xr.addEventListener('sessionend', endXR);
     function dismissOverlay(){ ui.classList.add('dim'); }
     if(navigator.xr){ navigator.xr.isSessionSupported('immersive-vr').then(ok=>{ vrAvailable=ok; enterBtn.textContent=ok?'Enter VR':'Enter \u2014 Desktop View'; }).catch(()=>{enterBtn.textContent='Enter \u2014 Desktop View';}); }
     else enterBtn.textContent='Enter \u2014 Desktop View';
     enterBtn.addEventListener('click', async ()=>{ if(!vrAvailable){ dismissOverlay(); return; }
       try{ const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
         renderer.xr.setReferenceSpaceType('local-floor'); await renderer.xr.setSession(session); dismissOverlay();
-        rig.position.set(0,0,0); camera.position.set(0,0,0); camera.rotation.set(0,0,0); xrSession=session;
+        rig.position.set(0,0,0); camera.position.set(0,0,0); camera.rotation.set(0,0,0); xrSession=session; controllers.length=0;
         for(let i=0;i<2;i++){ const c=renderer.xr.getController(i); c.userData={trigPrev:false,gripPrev:false,active:null,last:null,grabbing:null,inputSource:null};
           c.addEventListener('connected', e=>{ c.userData.inputSource=e.data; });
           c.addEventListener('disconnected', ()=>{ c.userData.inputSource=null; });
           scene.add(c); controllers.push(c); }
-        session.addEventListener('end',()=>ui.classList.remove('dim'));
+        session.addEventListener('end', endXR);
       }catch(err){ console.warn('VR session failed:',err); dismissOverlay(); }
     });
 
