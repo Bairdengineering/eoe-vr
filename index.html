@@ -1279,6 +1279,9 @@
           entry.prods=Object.keys(rx.p).map(function(s){ const mol=CHEM.MOL[s]; return {f:s,n:mol?mol.n:s,M:(mol&&mol.M!=null)?mol.M:null}; });
           entry.clean=!Object.keys(m.leftover||{}).length; entry.leftover=m.leftover||{}; }
         else { const t=chemRun(reag).filter(function(mm){return mm.times===0;}); entry.name=t.length?(t[0].rx.name+' (not balanced yet)'):'Mix (no reaction)'; entry.mixonly=true; }
+        // auto-log ONLY clean, balanced reactions (exact ratio, no leftovers).
+        // leftovers / not-balanced / no-reaction are NOT auto-logged — keep them deliberately with Save to project.
+        if(!(ms.length && entry.clean)) return;
         formulaBook.push(entry);
         const bb=document.getElementById('bookBtn'); if(bb) bb.textContent='\uD83D\uDCD2 Lab journal ('+formulaBook.length+')';
         const bp=document.getElementById('bookPanel'); if(bp&&bp.classList.contains('show')) renderBook();
