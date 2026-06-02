@@ -179,7 +179,7 @@
     <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">substrate</span></div>
     <div><b>&chi;s &minus; &lambda;</b> &nbsp; <span id="hudHeld">0 held</span></div>
   </div>
-  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 28 &middot; 2026-06-02</div>
+  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 29 &middot; 2026-06-02</div>
   </div>
 
   <div id="molPicker"><div class="hd">Molecules</div><div id="molList"></div></div>
@@ -506,12 +506,13 @@
         else { if(tproj<0.2) continue; const cosang=tproj/dist; if(cosang<0.93) continue; score=1.0-cosang; tt=tproj; } // ~20deg aim cone, any range
         if(score<bestScore){ best=b; bestScore=score; bestT=tt; } }
       if(best){ best.grabDist=bestT; best.grabbedBy=ref; } return best; }
-    function grabShowcase(ref){ poseOf(ref,_o,_d); let best=null,bestScore=1e9,bestT=1.0;
-      for(const b of showcaseBodies){ if(!b||b.free) continue; const vx=b.center.x-_o.x,vy=b.center.y-_o.y,vz=b.center.z-_o.z;
-        const dist=Math.hypot(vx,vy,vz)+1e-5; const tproj=vx*_d.x+vy*_d.y+vz*_d.z; let score,tt;
-        if(dist<0.6){ score=-1.0; tt=Math.max(0.5,dist); }
-        else { if(tproj<0.2) continue; const cosang=tproj/dist; if(cosang<0.9) continue; score=1.0-cosang; tt=tproj; }
-        if(score<bestScore){ best=b; bestScore=score; bestT=tt; } }
+    function grabShowcase(ref){ poseOf(ref,_o,_d); let best=null,bestPerp=1e9,bestT=1.0;
+      for(const b of showcaseBodies){ if(!b||b.free) continue;
+        const vx=b.center.x-_o.x,vy=b.center.y-_o.y,vz=b.center.z-_o.z;
+        const tproj=vx*_d.x+vy*_d.y+vz*_d.z; if(tproj<0.1) continue;                 // must be in front of the controller
+        const px=vx-_d.x*tproj, py=vy-_d.y*tproj, pz=vz-_d.z*tproj; const perp=Math.hypot(px,py,pz);  // distance from atom centre to the aim line
+        if(perp > b.radius+0.45) continue;                                            // generous grab radius around each atom
+        if(perp<bestPerp){ best=b; bestPerp=perp; bestT=Math.max(0.5,tproj); } }
       if(best){ best.grabDist=bestT; best.grabbedBy=ref; } return best; }
     function dissolveAimed(ref){ poseOf(ref,_o,_d); let best=null,bestScore=1e9;
       for(const b of pool){ if(b.free||!b.held||b.showcase) continue; const vx=b.center.x-_o.x,vy=b.center.y-_o.y,vz=b.center.z-_o.z;
