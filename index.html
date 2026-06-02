@@ -83,6 +83,9 @@
   #benchPanel .tool.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.18);color:#ffe2a6;}
   #benchPanel #benchClear{margin-top:6px;background:rgba(74,144,212,0.10);color:#9fb3d6;}
   #benchPanel #bookBtn{margin-top:6px;background:rgba(126,178,127,0.12);color:#cfe6cf;border:1px solid rgba(126,178,127,0.3);}
+  #benchPanel .proftoggle{font-size:12px;color:#d8c089;cursor:pointer;margin:8px 2px 0;}
+  #benchPanel .proftoggle:hover{color:#ecb74e;}
+  #benchPanel .proftoggle #profState{font-weight:600;}
   #bookPanel{position:fixed;top:60px;left:280px;z-index:20;background:rgba(7,9,15,0.94);border:1px solid rgba(212,160,73,0.3);border-radius:14px;padding:12px 13px 14px;width:340px;max-height:78vh;overflow-y:auto;display:none;}
   #bookPanel.show{display:block;}
   #bookPanel .hd{font-family:ui-serif,Georgia,serif;font-size:17px;color:#e7eefc;margin:2px 2px 4px;display:flex;justify-content:space-between;align-items:center;}
@@ -196,6 +199,7 @@
     <button id="benchReact">React</button>
     <button id="benchClear">Clear</button>
     <button id="bookBtn">&#128210; Lab journal</button>
+    <div class="proftoggle" id="profToggle">&#127891; professor: <span id="profState">on</span></div>
     <div class="lbl" style="margin-top:12px;">Lens of vision</div>
     <div class="lensrow" id="benchLenses"></div>
   </div>
@@ -1105,6 +1109,57 @@
       return out; }
     function chemEqn(rx){ const f=o=>Object.keys(o).map(s=>(o[s]>1?o[s]:'')+s).join(' + '); return f(rx.r)+' → '+f(rx.p); }
 
+    // ---- general closure enumerator: the substrate decides for ANY mix, no catalogue needed ----
+    // proven standalone (water/methane/CO2/NH3/OF2 close; 1H+1O, ionic, metal, noble, radical don't)
+    function _eVal(e){ return (typeof REAG!=='undefined'&&REAG[e]&&REAG[e].pos!=null)?REAG[e].pos:1; }
+    function _eCls(e){ return (typeof REAG!=='undefined'&&REAG[e]&&REAG[e].cls)?REAG[e].cls:'nonmetal'; }
+    function enumerateClosure(mix){
+      var keys=Object.keys(mix).filter(function(k){return mix[k]>0;});
+      if(!keys.length) return {closes:false, why:'nothing in the mix yet'};
+      if(keys.some(function(e){return _eVal(e)===0;})) return {closes:false, why:'inert: a noble gas has no coupling positions to share'};
+      var metals=keys.filter(function(e){var c=_eCls(e); return c==='metal'||c==='noble_metal';});
+      var nonmetals=keys.filter(function(e){return _eCls(e)==='nonmetal';});
+      if(metals.length&&nonmetals.length) return {closes:false, kind:'ionic', why:'a metal and a nonmetal make an ionic lattice, not one discrete molecule'};
+      if(metals.length&&!nonmetals.length) return {closes:false, why:'metals alone form a bulk solid, not a molecule'};
+      var degs=[]; keys.forEach(function(e){ for(var i=0;i<mix[e];i++) degs.push(_eVal(e)); });
+      var atoms=degs.length, total=degs.reduce(function(a,b){return a+b;},0);
+      if(atoms===1) return {closes:false, why:'a lone atom with open positions is a radical, not a closed molecule'};
+      if(total%2!==0) return {closes:false, why:'odd total of coupling positions — one can’t pair', need:'adjust an atom so the positions are even'};
+      var mx=Math.max.apply(null,degs), rest=total-mx;
+      if(mx>rest) return {closes:false, why:'one atom needs more bonds than the rest of the pile can give'};
+      if(Math.floor(total/2) < atoms-1) return {closes:false, why:'not enough shared positions to connect every atom'};
+      var match=null; if(window.CHEM){ for(var spec in CHEM.MOL){ if(_sameMix(_parseSpec(spec),mix)){ match=spec; break; } } }
+      return {closes:true, match:match, why:'all coupling positions pair among nonmetals into a connected molecule'};
+    }
+    function _parseSpec(f){ var out={},re=/([A-Z][a-z]?)(\d*)/g,m; while((m=re.exec(f))){ if(!m[1])continue; out[m[1]]=(out[m[1]]||0)+(m[2]?parseInt(m[2],10):1);} return out; }
+    function _sameMix(a,b){ var ka=Object.keys(a),kb=Object.keys(b); if(ka.length!==kb.length)return false; for(var i=0;i<ka.length;i++){ if(a[ka[i]]!==b[ka[i]])return false; } return true; }
+    // ---- the professor: plain-language coaching, on by default, never invents chemistry ----
+    let profOn=true;
+    function professorTip(mix,en){
+      var keys=Object.keys(mix).filter(function(k){return mix[k]>0;});
+      if(!keys.length) return '';
+      // 1) ionic: name the honest reason and point at what each WOULD pair with
+      if(en.kind==='ionic'){ var metal=keys.filter(function(e){var c=_eCls(e);return c==='metal'||c==='noble_metal';})[0];
+        return (metal||'the metal')+' gives its electron away rather than sharing \u2014 that makes a salt, not a molecule. Metals pair with single nonmetals like Cl; if you want a molecule, build from nonmetals only (try H, O, C, N).'; }
+      // 2) noble gas present
+      if(keys.some(function(e){return _eVal(e)===0;})) return 'a noble gas sits out \u2014 it has no open positions to share. Pull it from the mix and the rest can react.';
+      // 3) lone atom
+      if(keys.length===1 && mix[keys[0]]===1) return 'one atom on its own can\u2019t close \u2014 give it a partner. '+keys[0]+' has '+_eVal(keys[0])+' open position'+(_eVal(keys[0])>1?'s':'')+' to fill.';
+      // 4) odd positions: suggest the smallest add that makes it even and could close
+      if(en.why && en.why.indexOf('odd')>=0){
+        // try adding one H or one O to reach a known/closing mix
+        for(var add of ['H','O','C','N']){ var t=Object.assign({},mix); t[add]=(t[add]||0)+1; var e2=enumerateClosure(t); if(e2.closes) return 'you\u2019re one atom short \u2014 add one '+ (REAG[add]?REAG[add].name||add:add) +' and the positions pair up'+(e2.match?' into '+e2.match:'')+'.'; }
+        return 'the coupling positions come out odd \u2014 one stays unpaired. Add or remove a single atom so they can all pair.';
+      }
+      // 5) one atom over-demands bonds
+      if(en.why && en.why.indexOf('more bonds')>=0) return 'one atom wants more bonds than the others can give \u2014 add more small partners (like H) to satisfy it.';
+      // 6) it closes but isn't a named recipe
+      if(en.closes && !en.match) return 'this closes into a real molecule \u2014 it just isn\u2019t a named recipe yet. The substrate says it holds together.';
+      // 7) it closes and is named
+      if(en.closes && en.match) return 'looks good \u2014 these share their positions cleanly. Press React to make '+en.match+'.';
+      return '';
+    }
+
     // atoms pair into their standard reagent form before meeting the reaction table:
     // free H/O/N/Cl/F exist as diatomic gases — this is the bench's own closure logic,
     // and it's what lets atom clicks reach a catalogue written in molecules (H2,O2,...).
@@ -1277,6 +1332,29 @@
               x.fillText('\u2697  '+tried[0].rx.name+': not enough '+tried[0].short.join(', ')+' for the ratio \u2014 add more',44,y); y+=38; } }
         }
       }catch(e){ /* recipe card is additive; never break the panel */ }
+      // ---- substrate verdict + professor: runs when no named recipe matched ----
+      if(!cardShown && benchMix.length){
+        try{
+          var rawmix={}; benchMix.forEach(function(it){ rawmix[it.key]=(rawmix[it.key]||0)+it.qty; });
+          var en=enumerateClosure(rawmix);
+          if(en.closes){ cardShown=true;
+            x.fillStyle='#7fb27f'; x.font='600 26px system-ui, sans-serif';
+            x.fillText('the substrate closes this'+(en.match?' \u2014 '+en.match:''),44,y); y+=38;
+            x.fillStyle='#9fb3d6'; x.font='300 23px system-ui, sans-serif'; x.fillText(en.why+'   [substrate]',44,y); y+=34;
+            if(!en.match){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('not a named recipe yet \u2014 the substrate says it can form',44,y); y+=34; } }
+          else { cardShown=true;
+            x.fillStyle='#6fb0e0'; x.font='600 26px system-ui, sans-serif'; x.fillText('the substrate doesn\u2019t close this',44,y); y+=38;
+            x.fillStyle='#9fb3d6'; x.font='300 23px system-ui, sans-serif';
+            var ww=en.why.split(' '); var ln='',yy=y; var mw=BIW-100;
+            for(var wi=0;wi<ww.length;wi++){ var tt=ln?ln+' '+ww[wi]:ww[wi]; if(x.measureText(tt).width>mw){ x.fillText(ln,44,yy); ln=ww[wi]; yy+=30; } else ln=tt; } x.fillText(ln,44,yy); y=yy+30;
+            x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('[substrate]',44,y); y+=32; }
+          // the professor — always-on plain-language coaching (toggleable off)
+          if(profOn){ var tip=professorTip(rawmix,en);
+            if(tip){ y+=6; x.fillStyle='#ecb74e'; x.font='italic 600 22px Georgia, serif'; x.fillText('\uD83C\uDF93 professor',44,y); y+=30;
+              x.fillStyle='#d8c089'; x.font='300 22px system-ui, sans-serif'; var pw=tip.split(' '); var pl='',py=y; var pmw=BIW-100;
+              for(var pi=0;pi<pw.length;pi++){ var tt2=pl?pl+' '+pw[pi]:pw[pi]; if(x.measureText(tt2).width>pmw){ x.fillText(pl,44,py); pl=pw[pi]; py+=30; } else pl=tt2; } x.fillText(pl,44,py); y=py+34; } }
+        }catch(e){}
+      }
       if(!cardShown){ x.fillStyle='#9fb3d6'; x.font='300 26px system-ui, sans-serif';
         x.fillText(benchMix.length?'Press React to combine your mix.':'Add reagents from the shelf, set amounts, then React.',44,y); y+=44; }
 
@@ -1418,6 +1496,7 @@
       const bb=document.getElementById('bookBtn'); if(bb) bb.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(!p) return; renderBook(); p.classList.toggle('show'); });
       const bc=document.getElementById('bookClose'); if(bc) bc.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(p) p.classList.remove('show'); });
       const st=document.getElementById('seeTable'); if(st) st.addEventListener('click',function(){ window.__benchReturn=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
+      const pt2=document.getElementById('profToggle'); if(pt2) pt2.addEventListener('click',function(){ profOn=!profOn; var ps=document.getElementById('profState'); if(ps) ps.textContent=profOn?'on':'off'; drawBenchInfo(); });
       const lr=document.getElementById('benchLenses'); if(lr){ LENSES.forEach((L,i)=>{ const el=document.createElement('div'); el.className='lensbtn'; el.textContent=L.name; el.addEventListener('click',()=>setBenchLens(i)); lr.appendChild(el); }); }
       renderMix(); refreshTools(); refreshLensButtons(); }
     buildBenchPanel();
