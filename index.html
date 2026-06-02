@@ -1694,6 +1694,7 @@
     const ctrlPanel=new THREE.Mesh(new THREE.PlaneGeometry(0.66,0.66*760/720), new THREE.MeshBasicMaterial({map:ctrlTex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     ctrlPanel.renderOrder=20; ctrlPanel.visible=false; scene.add(ctrlPanel);
     let ctrlButtons=[]; let ctrlHover=null;
+    let benchScrollY=0, benchContentH=760, ctrlSaveMsg='';   // VR bench panel scroll + save flash
     function cpBtn(x,y,w,h,label,id,on,fn,kind){
       const hov=(ctrlHover===id);
       let bg = on?'rgba(212,160,73,0.26)':(kind==='go'?'rgba(126,178,127,0.16)':'rgba(74,144,212,0.10)');
@@ -1709,17 +1710,81 @@
       cpx.strokeStyle='rgba(212,160,73,0.4)'; cpx.lineWidth=2; rrect(cpx,8,8,704,744,22); cpx.stroke();
       cpx.textAlign='left';
       if(mode==='bench'){
-        cpx.fillStyle='#e7eefc'; cpx.font='400 40px Georgia, serif'; cpx.fillText('Reaction Workbench',40,68);
-        function chipRow(slot,sel,yy){ const n=REAG_ORDER.length, m=40, gap=8, w=(720-2*m-(n-1)*gap)/n;
-          for(let i=0;i<n;i++){ const k=REAG_ORDER[i]; cpBtn(m+i*(w+gap), yy, w, 56, REAG[k].sym, slot+':'+k, k===sel, (function(s,kk){return ()=>{selectBench(s,kk); drawCtrl();};})(slot,k)); } }
-        cpx.fillStyle='#9fb3d6'; cpx.font='600 20px system-ui, sans-serif'; cpx.fillText('REAGENT A',40,120);
-        chipRow('A',benchA,134);
-        cpx.fillStyle='#9fb3d6'; cpx.font='600 20px system-ui, sans-serif'; cpx.fillText('REAGENT B',40,232);
-        chipRow('B',benchB,246);
-        cpBtn(40,330,640,68,'React','react',false,()=>{ runReaction(); drawCtrl(); },'go');
-        cpx.fillStyle='#9fb3d6'; cpx.font='600 20px system-ui, sans-serif'; cpx.fillText('LENS OF VISION',40,448);
-        for(let i=0;i<LENSES.length;i++){ cpBtn(40+i*330,462,310,58,LENSES[i].name,'lens:'+i,i===benchLens,(function(ii){return ()=>{setBenchLens(ii); drawCtrl();};})(i)); }
-        cpx.fillStyle='#5f7299'; cpx.font='300 19px system-ui, sans-serif'; cpx.fillText('Point a controller here \u00b7 trigger to select',40,560);
+        cpx.fillStyle='#e7eefc'; cpx.font='400 38px Georgia, serif'; cpx.fillText('Reaction Workbench',40,58);
+        const CTOP=84, CBOT=702, S=benchScrollY;
+        const vis=(y,h)=> (y+h>CTOP && y<CBOT);
+        const B=(x,y,w,h,label,id,on,fn,kind)=>{ if(vis(y,h)) cpBtn(x,y,w,h,label,id,on,fn,kind); };
+        const hdr=(t,y)=>{ if(vis(y,22)){ cpx.fillStyle='#d8a85a'; cpx.font='600 19px system-ui, sans-serif'; cpx.fillText(t,40,y+16); } };
+        const txt=(t,x,y,col,fnt)=>{ if(vis(y,20)){ cpx.fillStyle=col; cpx.font=fnt; cpx.fillText(t,x,y); } };
+        cpx.save(); cpx.beginPath(); cpx.rect(14,CTOP,692,CBOT-CTOP); cpx.clip();
+        let y = CTOP + 8 - S;
+        // ---- ADD A REAGENT ----
+        hdr('ADD A REAGENT', y); y+=34;
+        const SH=['Elements','Gases','Acids','Salts','Made'];
+        for(let i=0;i<SH.length;i++){ B(40+i*129, y, 124, 44, SH[i], 'shelf:'+SH[i], benchShelf===SH[i], (function(s){return ()=>{benchShelf=s; drawCtrl();};})(SH[i])); }
+        y+=44+14;
+        // reagent chips for current shelf
+        let items=[];
+        if(benchShelf==='Elements'){ shelfElements.forEach(function(k){ if(REAG[k]) items.push({key:k,sym:REAG[k].sym}); }); }
+        else if(benchShelf==='Made'){ madeProducts.forEach(function(spec){ var pr=PRODUCT_REAG[spec]; if(pr) items.push({key:spec,sym:pr.sym}); }); }
+        else { var want=SHELF_TYPE[benchShelf]; madeProducts.forEach(function(spec){ if((window.CHEM_TYPE&&CHEM_TYPE[spec])===want){ var pr=PRODUCT_REAG[spec]; if(pr) items.push({key:spec,sym:pr.sym}); } }); }
+        const cW=118,cH=50,cg=8,perRow=5;
+        if(!items.length){ txt('nothing here yet \u2014 react something first', 40, y+24, '#5f7299', '300 20px system-ui, sans-serif'); y+=44; }
+        else { items.forEach(function(it,i){ const col=i%perRow, row=Math.floor(i/perRow);
+            B(40+col*(cW+cg), y+row*(cH+cg), cW, cH, it.sym, 'pick:'+it.key, benchPick===it.key, (function(kk){return ()=>{benchPick=kk; drawCtrl();};})(it.key)); });
+          y += Math.ceil(items.length/perRow)*(cH+cg); }
+        if(benchShelf==='Elements'){ B(40, y, 290, 46, '+ add from table', 'addtable', false, ()=>{ window.__benchReturn=true; if(typeof window!=='undefined')window.tableEditMode=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); }); y+=46+8; }
+        // selected name
+        var rr=getReagent(benchPick); txt(rr?('selected: '+rr.name):'', 40, y+18, '#9fb3d6', '300 22px system-ui, sans-serif'); y+=34;
+        // QTY + Add
+        txt('QTY', 40, y+38, '#9fb3d6', '600 20px system-ui, sans-serif');
+        B(120, y, 56, 56, '\u2212', 'qm', false, ()=>{ benchQty=Math.max(1,benchQty-1); drawCtrl(); });
+        if(vis(y,56)){ cpx.fillStyle='#e7eefc'; cpx.font='500 30px system-ui, sans-serif'; cpx.textAlign='center'; cpx.fillText(benchQty, 200, y+38); cpx.textAlign='left'; }
+        B(228, y, 56, 56, '+', 'qp', false, ()=>{ benchQty=Math.min(9,benchQty+1); drawCtrl(); });
+        B(310, y, 230, 56, 'Add \u2192', 'add', false, ()=>{ const ex=benchMix.find(function(m){return m.key===benchPick;}); if(ex) ex.qty=Math.min(9,ex.qty+benchQty); else benchMix.push({key:benchPick,qty:benchQty}); benchQty=1; syncBenchAB(); renderMix&&renderMix(); drawBenchInfo(); drawCtrl(); }, 'go');
+        y+=56+22;
+        // ---- YOUR MIX ----
+        hdr('YOUR MIX', y); y+=34;
+        if(!benchMix.length){ txt('pick an agent, set a qty, add it', 40, y+22, '#5f7299', '300 20px system-ui, sans-serif'); y+=40; }
+        else { benchMix.forEach(function(it,idx){ var r=getReagent(it.key), nm=r?r.name:it.key, sym=r?(r.sym||it.key):it.key;
+            txt(it.qty+'\u00d7  '+sym+'   '+nm, 44, y+32, '#e7eefc', '400 24px system-ui, sans-serif');
+            B(620, y, 46, 46, '\u00d7', 'rm:'+idx, false, (function(ix){return ()=>{ benchMix.splice(ix,1); syncBenchAB(); renderMix&&renderMix(); drawBenchInfo(); drawCtrl(); };})(idx), 'x');
+            y+=52; }); }
+        y+=12;
+        // ---- CONDITIONS ----
+        hdr('CONDITIONS', y); y+=34;
+        txt('Heat', 40, y+36, '#9fb3d6', '500 22px system-ui, sans-serif');
+        B(180, y, 54, 52, '\u2212', 'hm', false, ()=>{ benchHeat=stepDial(HEAT_STEPS,benchHeat,-1); refreshTools&&refreshTools(); drawBenchInfo(); drawCtrl(); });
+        if(vis(y,52)){ cpx.fillStyle='#ffe2a6'; cpx.font='500 26px system-ui, sans-serif'; cpx.textAlign='center'; cpx.fillText(benchHeat+'\u00b0C', 320, y+34); cpx.textAlign='left'; }
+        B(420, y, 54, 52, '+', 'hp', false, ()=>{ benchHeat=stepDial(HEAT_STEPS,benchHeat,1); refreshTools&&refreshTools(); drawBenchInfo(); drawCtrl(); });
+        y+=62;
+        txt('Pressure', 40, y+36, '#9fb3d6', '500 22px system-ui, sans-serif');
+        B(180, y, 54, 52, '\u2212', 'pm', false, ()=>{ benchPress=stepDial(PRESS_STEPS,benchPress,-1); refreshTools&&refreshTools(); drawBenchInfo(); drawCtrl(); });
+        if(vis(y,52)){ cpx.fillStyle='#ffe2a6'; cpx.font='500 26px system-ui, sans-serif'; cpx.textAlign='center'; cpx.fillText(benchPress+' atm', 320, y+34); cpx.textAlign='left'; }
+        B(420, y, 54, 52, '+', 'pp', false, ()=>{ benchPress=stepDial(PRESS_STEPS,benchPress,1); refreshTools&&refreshTools(); drawBenchInfo(); drawCtrl(); });
+        y+=62;
+        const conds=[['spark','Spark'],['catalyst','Catalyst'],['water','Water']];
+        for(let i=0;i<conds.length;i++){ B(40+i*210, y, 200, 52, conds[i][1], 'cond:'+conds[i][0], !!benchCond[conds[i][0]], (function(k){return ()=>{ benchCond[k]=!benchCond[k]; refreshTools&&refreshTools(); drawBenchInfo(); drawCtrl(); };})(conds[i][0])); }
+        y+=52+20;
+        // ---- REACT ----
+        B(40, y, 640, 70, 'React', 'react', false, ()=>{ runReaction(); drawCtrl(); }, 'go'); y+=70+16;
+        // ---- SAVE + LENS ----
+        B(40, y, 400, 56, ctrlSaveMsg||'\uD83D\uDCC1 Save to project', 'save', false, ()=>{
+          const e=(typeof currentResultForSave==='function')?currentResultForSave():null;
+          if(e){ saveToProject('VR saves', e); ctrlSaveMsg='\u2713 saved'; } else { ctrlSaveMsg='\u2014 nothing to save'; }
+          drawCtrl(); setTimeout(function(){ ctrlSaveMsg=''; if(mode==='bench') drawCtrl(); }, 1500); });
+        y+=56+20;
+        hdr('LENS OF VISION', y); y+=34;
+        for(let i=0;i<LENSES.length;i++){ B(40+i*330, y, 310, 54, LENSES[i].name, 'lens:'+i, i===benchLens, (function(ii){return ()=>{ setBenchLens(ii); drawCtrl(); };})(i)); }
+        y+=54;
+        cpx.restore();
+        // content height + scrollbar (fixed, outside clip)
+        benchContentH = (y + S) - (CTOP + 8) + 30;
+        const viewH = CBOT - CTOP, maxS = Math.max(0, benchContentH - viewH);
+        if(maxS > 0){ cpx.fillStyle='rgba(160,180,210,0.12)'; rrect(cpx, 700, CTOP, 6, viewH, 3); cpx.fill();
+          const th = Math.max(40, viewH*viewH/benchContentH), ty = CTOP + (S/maxS)*(viewH-th);
+          cpx.fillStyle='rgba(236,183,78,0.6)'; rrect(cpx, 700, ty, 6, th, 3); cpx.fill(); }
+        cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText('thumbstick = scroll \u00b7 trigger = select', 40, 742);
       } else if(mode==='cell'){
         cpx.fillStyle='#e7eefc'; cpx.font='400 40px Georgia, serif'; cpx.fillText('Single Cell',40,68);
         const dead=cellState.deadAt!=null, feeding=cellState.fed&&!dead;
@@ -1737,14 +1802,14 @@
     function setMode(m){ const _t0=performance.now(); mode=m;
       const tbl=(m==='table'), mol=(m==='mol'), bench=(m==='bench'), cell=(m==='cell');
       tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol; if(mol) drawMolShelf();
-      benchGroup.visible=bench; benchInfo.visible=bench;
+      benchGroup.visible=bench; benchInfo.visible=bench; if(bench) benchScrollY=0;
       if(!bench){ eqPlane.visible=false; const hs=document.getElementById('hintStrip'); if(hs) hs.classList.remove('show'); }
       cellGroup.visible=cell; cellInfo.visible=cell;
       const cpan=document.getElementById('cellPanel'); if(cpan) cpan.classList.toggle('show', cell && !renderer.xr.isPresenting);
       if(cell){ cellReset(); }
       const mp=document.getElementById('molPicker'); if(mp) mp.classList.toggle('show', mol && !renderer.xr.isPresenting); molShelf.visible = mol && renderer.xr.isPresenting;
       const bp=document.getElementById('benchPanel'); if(bp) bp.classList.toggle('show', bench && !renderer.xr.isPresenting);
-      if(bench){ placeReagents(); drawBenchInfo(); refreshBenchChips(); refreshLensButtons(); } else { closA.vis=closB.vis=closP.vis=false; closA.pts.visible=closB.pts.visible=closP.pts.visible=false; }
+      if(bench){ placeReagents(); drawBenchInfo(); refreshBenchChips(); refreshLensButtons(); drawCtrl(); } else { closA.vis=closB.vis=closP.vis=false; closA.pts.visible=closB.pts.visible=closP.pts.visible=false; }
       if(!tbl){ selZ=0; hoverZ=0; }
       if(!mol){ molSel=-1; molHover=-1; curMol=null; molGrab=null; for(const a of matom){ a.active=false; a.pts.visible=false; } mbPts.visible=false; molInfo.visible=false; }
       if(tbl||mol||bench||cell){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
@@ -1887,6 +1952,8 @@
               for(const b of ctrlButtons){ if(inRect(px,py,b.r)){ hit=b; break; } }
               const hid=hit?hit.id:null; if(hid!==ctrlHover){ ctrlHover=hid; drawCtrl(); }
               if(trig&&!ud.trigPrev&&hit){ hit.fn(); } }
+            if(mode==='bench'){ const ax=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0);
+              if(Math.abs(ax)>0.15){ const maxS=Math.max(0,benchContentH-(702-84)); const ns=Math.max(0,Math.min(maxS, benchScrollY - ax*900*dt)); if(ns!==benchScrollY){ benchScrollY=ns; drawCtrl(); } } }
             ud.trigPrev=trig; ud.gripPrev=grip; continue; }
           if(trig&&!ud.trigPrev){ poseOf(c,_o,_d); intersectSea(_o,_d,_spot); ud.active=spawnBody(c,_spot); ud.last=ud.active; }
           if(!trig&&ud.trigPrev){ toPending(ud.active); ud.active=null; }
