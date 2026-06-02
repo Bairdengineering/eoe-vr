@@ -179,6 +179,7 @@
     <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">substrate</span></div>
     <div><b>&chi;s &minus; &lambda;</b> &nbsp; <span id="hudHeld">0 held</span></div>
   </div>
+  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 26 &middot; 2026-06-02</div>
   </div>
 
   <div id="molPicker"><div class="hd">Molecules</div><div id="molList"></div></div>
@@ -1143,6 +1144,13 @@
         out.push({rx:rx,times:times,produced:produced,leftover:leftover}); }
       return out; }
     function chemEqn(rx){ const f=o=>Object.keys(o).map(s=>(o[s]>1?o[s]:'')+s).join(' + '); return f(rx.r)+' → '+f(rx.p); }
+    // pick the reaction that best explains the WHOLE mix — uses the most distinct species,
+    // leaves the least over, runs the most times — so adding/deleting doesn't flip the
+    // headline by array order. Used everywhere (card, React, save, log) so they all agree.
+    function pickBestMatch(ms){ if(!ms||!ms.length) return null; let best=ms[0], bk=[-1,1e9,-1e9];
+      for(const m of ms){ const cover=Object.keys(m.rx.r).length, lo=Object.keys(m.leftover||{}).length, tm=m.times||0;
+        if(cover>bk[0] || (cover===bk[0]&&(lo<bk[1] || (lo===bk[1]&&tm>bk[2])))){ best=m; bk=[cover,lo,tm]; } }
+      return best; }
 
     // ---- general closure enumerator: the substrate decides for ANY mix, no catalogue needed ----
     // proven standalone (water/methane/CO2/NH3/OF2 close; 1H+1O, ionic, metal, noble, radical don't)
@@ -1242,7 +1250,18 @@
       const ex=benchMix.find(function(m){return m.key===key;}); if(!ex) benchMix.push({key:key,qty:1});
       placeReagents(); renderMix&&renderMix(); drawBenchInfo(); }
 
-    function runReaction(){ const r=reactRead(benchA,benchB); benchResult=r; bt=0; bWaveDone=false;
+    function runReaction(){ let r=null;
+      try{ if(window.CHEM && benchMix.length){ const reag=chemReagents(); const ms=chemRun(reag).filter(function(m){return m.times>0;});
+        if(ms.length){ const m=pickBestMatch(ms), rx=m.rx; const req=condNeeds(rx.cond);
+          const condMet=(!req.heat||benchHeat>=req.heat)&&(!req.press||benchPress>=req.press)&&(!req.spark||benchCond.spark)&&(!req.catalyst||benchCond.catalyst)&&(!req.water||benchCond.water);
+          const ps=Object.keys(rx.p)[0], mol=CHEM.MOL[ps];
+          r={ couples:condMet, named:true, kind:'reaction', name:rx.name,
+              violent:/violent|explos|spontaneous|blinding|ignit|bang/i.test(rx.cond||''),
+              product: mol?{name:mol.n, f:ps, spec:ps, M:(mol.M!=null?mol.M:null)}:null,
+              reason: condMet?(rx.name+' proceeds \u2014 conditions are met.'):(rx.name+' is primed, but the conditions on the card aren\u2019t met yet.') }; } } }
+      catch(e){ r=null; }
+      if(!r) r=reactRead(benchA,benchB);   // fallback: pairwise substrate verdict for uncurated / no named reaction
+      benchResult=r; bt=0; bWaveDone=false;
       if(r.couples){ bphase='approach'; if(r.product){ const pc=tintFor(r.product.spec); closP.u.uHeld.value.setRGB(pc[0],pc[1],pc[2]);
           if(PRODUCT_REAG[r.product.spec] && madeProducts.indexOf(r.product.spec)<0){ madeProducts.push(r.product.spec); renderProductChips(); } } }
       else { bphase='inert'; }
@@ -1257,7 +1276,7 @@
     function currentResultForSave(){ try{ if(typeof CHEM==='undefined' || !benchMix.length) return null; const reag=chemReagents();
         const ms=chemRun(reag).filter(function(m){return m.times>0;}); const mixCopy=benchMix.map(function(it){return {key:it.key,qty:it.qty};});
         const condCopy={}; for(const k in benchCond) condCopy[k]=benchCond[k];
-        if(ms.length){ const m=ms[0],rx=m.rx,rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
+        if(ms.length){ const m=pickBestMatch(ms),rx=m.rx,rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
           return {name:rx.name, eqn:chemEqn(rx), mix:mixCopy, cond:condCopy, heat:benchHeat, press:benchPress,
                   prods:Object.keys(rx.p).map(function(s){var mol=CHEM.MOL[s];return {f:s,M:(mol&&mol.M!=null)?mol.M:null};}), hazard:rec?rec.hazards:''}; }
         var rawmix={}; benchMix.forEach(function(it){ rawmix[it.key]=(rawmix[it.key]||0)+it.qty; }); var en=enumerateClosure(rawmix);
@@ -1274,7 +1293,7 @@
         const mixCopy=benchMix.map(function(it){return {key:it.key,qty:it.qty};});
         const condCopy={}; for(const k in benchCond) condCopy[k]=benchCond[k];
         let entry={sig:sig, mix:mixCopy, cond:condCopy, heat:benchHeat, press:benchPress, clean:false, name:'Mix', eqn:'', prods:[], hazard:'', cstr:''};
-        if(ms.length){ const m=ms[0], rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
+        if(ms.length){ const m=pickBestMatch(ms), rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
           entry.name=rx.name; entry.eqn=chemEqn(rx); entry.cstr=rx.cond||''; entry.hazard=rec?rec.hazards:'';
           entry.prods=Object.keys(rx.p).map(function(s){ const mol=CHEM.MOL[s]; return {f:s,n:mol?mol.n:s,M:(mol&&mol.M!=null)?mol.M:null}; });
           entry.clean=!Object.keys(m.leftover||{}).length; entry.leftover=m.leftover||{}; }
@@ -1367,7 +1386,7 @@
       try{
         if(window.CHEM && benchMix.length){ const reag=chemReagents();
           const ms=chemRun(reag).filter(function(m){return m.times>0;});
-          if(ms.length){ cardShown=true; const m=ms[0], rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
+          if(ms.length){ cardShown=true; const m=pickBestMatch(ms), rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
             var extras=Object.keys(reag).filter(function(s){ return !(rx.r&&rx.r[s]); });
             var extraNames=extras.map(function(s){ var mol=CHEM.MOL[s]; return (mol&&mol.n)?mol.n:s; });
             setEquation(chemEqn(rx), '#ecb74e', rx.name + (extras.length?'  \u00b7  '+extras.join('+')+' not in this reaction':''));
@@ -1396,10 +1415,10 @@
             if(rec&&rec.hazards){ x.fillStyle='#e0696b'; x.font='600 22px system-ui, sans-serif'; var hw=('\u26a0 '+rec.hazards).split(' '); var hl='',hy=y; var hmw=BIW-100;
               for(var i=0;i<hw.length;i++){ var tt=hl?hl+' '+hw[i]:hw[i]; if(x.measureText(tt).width>hmw){ x.fillText(hl,44,hy); hl=hw[i]; hy+=28; } else hl=tt; } x.fillText(hl,44,hy); y=hy+38; } }
           else { const tried=chemRun(reag).filter(function(mm){return mm.times===0;});
-            if(tried.length){ cardShown=true; setEquation(chemEqn(tried[0].rx),'#c89b6a',tried[0].rx.name+' \u2014 ratio not met yet');
-              if(profOn) setHintStrip('close \u2014 '+tried[0].rx.name+' needs more '+tried[0].short.join(', ')+' to hit the ratio. Add a bit more, then React.'); else setHintStrip('');
+            if(tried.length){ cardShown=true; const tb=pickBestMatch(tried); setEquation(chemEqn(tb.rx),'#c89b6a',tb.rx.name+' \u2014 ratio not met yet');
+              if(profOn) setHintStrip('close \u2014 '+tb.rx.name+' needs more '+tb.short.join(', ')+' to hit the ratio. Add a bit more, then React.'); else setHintStrip('');
               x.fillStyle='#c89b6a'; x.font='300 24px system-ui, sans-serif';
-              x.fillText('\u2697  '+tried[0].rx.name+': not enough '+tried[0].short.join(', ')+' for the ratio \u2014 add more',44,y); y+=38; } }
+              x.fillText('\u2697  '+tb.rx.name+': not enough '+tb.short.join(', ')+' for the ratio \u2014 add more',44,y); y+=38; } }
         }
       }catch(e){ /* recipe card is additive; never break the panel */ }
       // ---- substrate verdict + professor: runs when no named recipe matched ----
