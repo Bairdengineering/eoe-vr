@@ -179,7 +179,7 @@
     <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">substrate</span></div>
     <div><b>&chi;s &minus; &lambda;</b> &nbsp; <span id="hudHeld">0 held</span></div>
   </div>
-  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 26 &middot; 2026-06-02</div>
+  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 28 &middot; 2026-06-02</div>
   </div>
 
   <div id="molPicker"><div class="hd">Molecules</div><div id="molList"></div></div>
@@ -506,6 +506,13 @@
         else { if(tproj<0.2) continue; const cosang=tproj/dist; if(cosang<0.93) continue; score=1.0-cosang; tt=tproj; } // ~20deg aim cone, any range
         if(score<bestScore){ best=b; bestScore=score; bestT=tt; } }
       if(best){ best.grabDist=bestT; best.grabbedBy=ref; } return best; }
+    function grabShowcase(ref){ poseOf(ref,_o,_d); let best=null,bestScore=1e9,bestT=1.0;
+      for(const b of showcaseBodies){ if(!b||b.free) continue; const vx=b.center.x-_o.x,vy=b.center.y-_o.y,vz=b.center.z-_o.z;
+        const dist=Math.hypot(vx,vy,vz)+1e-5; const tproj=vx*_d.x+vy*_d.y+vz*_d.z; let score,tt;
+        if(dist<0.6){ score=-1.0; tt=Math.max(0.5,dist); }
+        else { if(tproj<0.2) continue; const cosang=tproj/dist; if(cosang<0.9) continue; score=1.0-cosang; tt=tproj; }
+        if(score<bestScore){ best=b; bestScore=score; bestT=tt; } }
+      if(best){ best.grabDist=bestT; best.grabbedBy=ref; } return best; }
     function dissolveAimed(ref){ poseOf(ref,_o,_d); let best=null,bestScore=1e9;
       for(const b of pool){ if(b.free||!b.held||b.showcase) continue; const vx=b.center.x-_o.x,vy=b.center.y-_o.y,vz=b.center.z-_o.z;
         const dist=Math.hypot(vx,vy,vz)+1e-5; const tproj=vx*_d.x+vy*_d.y+vz*_d.z; let score;
@@ -721,7 +728,7 @@
 [92,"U","Uranium",0,7,"f",238.03,15.75,8.12,7.63,0.862,"actinide","Heaviest naturally-occurring element. Engine equation deeply negative — configurations persist on geological timescales but decay inexorably."],
 ];
     const ray=new THREE.Raycaster(); const mouseNDC=new THREE.Vector2(2,2);
-    let mode='sandbox', hoverZ=0, selZ=0, showcase=null;
+    let mode='sandbox', hoverZ=0, selZ=0, showcase=null, showcaseBodies=[];
     var menuRectS, menuRectT, menuRectM, menuRectB, menuRectC; // populated by drawMenu() above — do NOT re-init here, it would zero the VR hit-test regions
     function mcol(Mn){ const a=[46,116,173], b=[236,183,78]; return 'rgb('+((a[0]+(b[0]-a[0])*Mn)|0)+','+((a[1]+(b[1]-a[1])*Mn)|0)+','+((a[2]+(b[2]-a[2])*Mn)|0)+')'; }
     function mcolRGB(Mn){ return [(46+(236-46)*Mn)/255,(116+(183-116)*Mn)/255,(173+(78-173)*Mn)/255]; }
@@ -775,12 +782,18 @@
       itex.needsUpdate=true; }
 
     function clearSandboxBodies(){ for(const b of pool){ if(!b.free && !b.showcase){ b.dissolving=true; b.owner=null; b.held=false; b.grabbedBy=null; } } }
-    function showElement(o){ if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
-      const b=getFree(); if(!b) return; b.free=false; b.center.set(0,1.3,-1.95); b.form=0; b.held=false; b.owner=null; b.dissolving=false; b.grabbedBy=null; b.graceTimer=0; b.vel.set(0,0,0); b.feedBoost=0; b.showcase=true;
+    function clearShowcases(){ for(const b of showcaseBodies){ if(b&&!b.free){ b.showcase=false; b.dissolving=true; b.grabbedBy=null; } } showcaseBodies.length=0; showcase=null; }
+    function showElement(o){
+      // multi-select for side-by-side compare: keep prior atoms, slot each one center-out
+      for(const sb of showcaseBodies){ if(sb&&!sb.free && sb.elemZ===o[0]){ showcase=sb; selZ=o[0]; orbFocus.copy(sb.center); drawInfo(o); infoPlane.visible=true; drawTable(); return; } }
+      if(showcaseBodies.length>=8){ const old=showcaseBodies.shift(); if(old&&!old.free){ old.showcase=false; old.dissolving=true; old.grabbedBy=null; } }
+      const b=getFree(); if(!b) return; const n=showcaseBodies.length;
+      const sx = n===0 ? 0 : ((n%2===1?1:-1) * Math.ceil(n/2) * 0.65);
+      b.free=false; b.center.set(sx,1.35,-1.95); b.form=0; b.held=false; b.owner=null; b.dissolving=false; b.grabbedBy=null; b.graceTimer=0; b.vel.set(0,0,0); b.feedBoost=0; b.showcase=true; b.elemZ=o[0];
       b.radius=Math.max(0.26,Math.min(0.85, R*(0.6+0.95*Math.cbrt(o[6]/56)))); b.pts.visible=true; b.core.visible=true;
       const mc=mcolRGB(o[10]); b.u.uHeld.value.setRGB(mc[0],mc[1],mc[2]); b.core.material.color.setRGB(0.6+0.4*o[10],0.7+0.2*o[10],0.95-0.4*o[10]); b.noble=(o[11]==='noble_gas');
       orbFocus.copy(b.center);
-      showcase=b; selZ=o[0]; drawInfo(o); infoPlane.visible=true; drawTable(); }
+      showcaseBodies.push(b); showcase=b; selZ=o[0]; drawInfo(o); infoPlane.visible=true; drawTable(); }
 
     // ================= MOLECULES MODE =================
     const MOL=[{n:"Water",M:0.7343,sd:0.0003,r3d:1,f:"H2O",note:"Oxygen offers 2 coupling positions in a bent ~104.5° geometry; the substrate's lowest-strain closure for two H.",a:"O,0,0,0,0.891;H,0.411,-0.318,0,0;H,-0.411,-0.318,0,0",b:"0,1,1;0,2,1"},
@@ -1305,6 +1318,11 @@
         const bb=document.getElementById('bookBtn'); if(bb) bb.textContent='\uD83D\uDCD2 Lab journal ('+formulaBook.length+')';
         const bp=document.getElementById('bookPanel'); if(bp&&bp.classList.contains('show')) renderBook();
       }catch(e){} }
+    function loadMixEntry(e){ if(!e||!e.mix) return;
+      benchMix=e.mix.map(function(it){return {key:it.key,qty:it.qty};});
+      for(const k in benchCond) benchCond[k]= !!(e.cond&&e.cond[k]);
+      benchHeat=(e.heat!=null?e.heat:20); benchPress=(e.press!=null?e.press:1);
+      benchResult=null; syncBenchAB(); renderMix&&renderMix(); refreshTools&&refreshTools(); drawBenchInfo(); }
     function loadEntry(idx){ const e=formulaBook[idx]; if(!e) return;
       benchMix=e.mix.map(function(it){return {key:it.key,qty:it.qty};});
       for(const k in benchCond) benchCond[k]= !!(e.cond&&e.cond[k]);
@@ -1713,7 +1731,7 @@
     const ctrlPanel=new THREE.Mesh(new THREE.PlaneGeometry(0.66,0.66*760/720), new THREE.MeshBasicMaterial({map:ctrlTex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     ctrlPanel.renderOrder=20; ctrlPanel.visible=false; scene.add(ctrlPanel);
     let ctrlButtons=[]; let ctrlHover=null;
-    let benchScrollY=0, benchContentH=760, ctrlSaveMsg='';   // VR bench panel scroll + save flash
+    let benchScrollY=0, benchContentH=760, ctrlSaveMsg='', ctrlView='bench';   // VR bench panel scroll + save flash + sub-view
     function cpBtn(x,y,w,h,label,id,on,fn,kind){
       const hov=(ctrlHover===id);
       let bg = on?'rgba(212,160,73,0.26)':(kind==='go'?'rgba(126,178,127,0.16)':'rgba(74,144,212,0.10)');
@@ -1729,14 +1747,28 @@
       cpx.strokeStyle='rgba(212,160,73,0.4)'; cpx.lineWidth=2; rrect(cpx,8,8,704,744,22); cpx.stroke();
       cpx.textAlign='left';
       if(mode==='bench'){
-        cpx.fillStyle='#e7eefc'; cpx.font='400 38px Georgia, serif'; cpx.fillText('Reaction Workbench',40,58);
+        cpx.fillStyle='#e7eefc'; cpx.font='400 38px Georgia, serif'; cpx.fillText(ctrlView==='journal'?'Lab Notebook':'Reaction Workbench',40,58);
         const CTOP=84, CBOT=702, S=benchScrollY;
         const vis=(y,h)=> (y+h>CTOP && y<CBOT);
         const B=(x,y,w,h,label,id,on,fn,kind)=>{ if(vis(y,h)) cpBtn(x,y,w,h,label,id,on,fn,kind); };
         const hdr=(t,y)=>{ if(vis(y,22)){ cpx.fillStyle='#d8a85a'; cpx.font='600 19px system-ui, sans-serif'; cpx.fillText(t,40,y+16); } };
         const txt=(t,x,y,col,fnt)=>{ if(vis(y,20)){ cpx.fillStyle=col; cpx.font=fnt; cpx.fillText(t,x,y); } };
+        const fit=(t,maxw,fnt)=>{ cpx.font=fnt; t=t||''; if(cpx.measureText(t).width<=maxw) return t; let s=t; while(s.length>1 && cpx.measureText(s+'\u2026').width>maxw){ s=s.slice(0,-1); } return s+'\u2026'; };
         cpx.save(); cpx.beginPath(); cpx.rect(14,CTOP,692,CBOT-CTOP); cpx.clip();
         let y = CTOP + 8 - S;
+        if(ctrlView==='journal'){
+          B(40, y, 320, 46, '\u2190 Back to bench', 'jback', false, ()=>{ ctrlView='bench'; benchScrollY=0; drawCtrl(); }); y+=46+18;
+          const pf=Object.keys(projects);
+          if(pf.length){ hdr('\uD83D\uDCC1  SAVED PROJECTS', y); y+=34;
+            pf.forEach(function(folder){ txt(folder, 44, y+20, '#d8c089', '600 22px system-ui, sans-serif'); y+=32;
+              (projects[folder]||[]).forEach(function(e){ B(40, y, 640, 52, '', 'pj:'+folder+':'+(e.eqn||e.name), false, (function(en){return ()=>{ loadMixEntry(en); ctrlView='bench'; benchScrollY=0; drawCtrl(); };})(e));
+                txt(fit(e.eqn||e.name, 600, '400 24px system-ui, sans-serif'), 58, y+34, '#e7eefc', '400 24px system-ui, sans-serif'); y+=60; }); }); }
+          hdr('\uD83D\uDCD2  AUTO-LOGGED (clean reactions)', y); y+=34;
+          if(!formulaBook.length){ txt('react something clean \u2014 it logs here', 44, y+22, '#5f7299', '300 21px system-ui, sans-serif'); y+=44; }
+          else { formulaBook.forEach(function(e,idx){ B(40, y, 640, 52, '', 'fb:'+idx, false, (function(ix){return ()=>{ loadEntry(ix); ctrlView='bench'; benchScrollY=0; drawCtrl(); };})(idx));
+            txt(fit((e.name?e.name+'  \u00b7  ':'')+(e.eqn||''), 600, '400 22px system-ui, sans-serif'), 58, y+34, '#e7eefc', '400 22px system-ui, sans-serif'); y+=60; }); }
+          txt('tap an entry to load it back onto the bench', 44, y+22, '#5f7299', '300 19px system-ui, sans-serif'); y+=40;
+        } else {
         // ---- ADD A REAGENT ----
         hdr('ADD A REAGENT', y); y+=34;
         const SH=['Elements','Gases','Acids','Salts','Made'];
@@ -1787,15 +1819,18 @@
         y+=52+20;
         // ---- REACT ----
         B(40, y, 640, 70, 'React', 'react', false, ()=>{ runReaction(); drawCtrl(); }, 'go'); y+=70+16;
-        // ---- SAVE + LENS ----
-        B(40, y, 400, 56, ctrlSaveMsg||'\uD83D\uDCC1 Save to project', 'save', false, ()=>{
+        // ---- SAVE + NOTEBOOK ----
+        B(40, y, 300, 56, ctrlSaveMsg||'\uD83D\uDCC1 Save', 'save', false, ()=>{
           const e=(typeof currentResultForSave==='function')?currentResultForSave():null;
           if(e){ saveToProject('VR saves', e); ctrlSaveMsg='\u2713 saved'; } else { ctrlSaveMsg='\u2014 nothing to save'; }
           drawCtrl(); setTimeout(function(){ ctrlSaveMsg=''; if(mode==='bench') drawCtrl(); }, 1500); });
+        { let jn=formulaBook.length; for(const fk in projects) jn+=(projects[fk]||[]).length;
+          B(360, y, 320, 56, '\uD83D\uDCD2 Notebook ('+jn+')', 'notebook', false, ()=>{ ctrlView='journal'; benchScrollY=0; drawCtrl(); }); }
         y+=56+20;
         hdr('LENS OF VISION', y); y+=34;
         for(let i=0;i<LENSES.length;i++){ B(40+i*330, y, 310, 54, LENSES[i].name, 'lens:'+i, i===benchLens, (function(ii){return ()=>{ setBenchLens(ii); drawCtrl(); };})(i)); }
         y+=54;
+        }
         cpx.restore();
         // content height + scrollbar (fixed, outside clip)
         benchContentH = (y + S) - (CTOP + 8) + 30;
@@ -1803,7 +1838,7 @@
         if(maxS > 0){ cpx.fillStyle='rgba(160,180,210,0.12)'; rrect(cpx, 700, CTOP, 6, viewH, 3); cpx.fill();
           const th = Math.max(40, viewH*viewH/benchContentH), ty = CTOP + (S/maxS)*(viewH-th);
           cpx.fillStyle='rgba(236,183,78,0.6)'; rrect(cpx, 700, ty, 6, th, 3); cpx.fill(); }
-        cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText('thumbstick = scroll \u00b7 trigger = select', 40, 742);
+        cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText(ctrlView==='journal'?'thumbstick = scroll \u00b7 trigger = load entry':'thumbstick = scroll \u00b7 trigger = select', 40, 742);
       } else if(mode==='cell'){
         cpx.fillStyle='#e7eefc'; cpx.font='400 40px Georgia, serif'; cpx.fillText('Single Cell',40,68);
         const dead=cellState.deadAt!=null, feeding=cellState.fed&&!dead;
@@ -1821,7 +1856,7 @@
     function setMode(m){ const _t0=performance.now(); mode=m;
       const tbl=(m==='table'), mol=(m==='mol'), bench=(m==='bench'), cell=(m==='cell');
       tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol; if(mol) drawMolShelf();
-      benchGroup.visible=bench; benchInfo.visible=bench; if(bench) benchScrollY=0;
+      benchGroup.visible=bench; benchInfo.visible=bench; if(bench){ benchScrollY=0; ctrlView='bench'; }
       if(!bench){ eqPlane.visible=false; const hs=document.getElementById('hintStrip'); if(hs) hs.classList.remove('show'); }
       cellGroup.visible=cell; cellInfo.visible=cell;
       const cpan=document.getElementById('cellPanel'); if(cpan) cpan.classList.toggle('show', cell && !renderer.xr.isPresenting);
@@ -1831,9 +1866,9 @@
       if(bench){ placeReagents(); drawBenchInfo(); refreshBenchChips(); refreshLensButtons(); drawCtrl(); } else { closA.vis=closB.vis=closP.vis=false; closA.pts.visible=closB.pts.visible=closP.pts.visible=false; }
       if(!tbl){ selZ=0; hoverZ=0; }
       if(!mol){ molSel=-1; molHover=-1; curMol=null; molGrab=null; for(const a of matom){ a.active=false; a.pts.visible=false; } mbPts.visible=false; molInfo.visible=false; }
-      if(tbl||mol||bench||cell){ clearSandboxBodies(); if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; }
+      if(tbl||mol||bench||cell){ clearSandboxBodies(); clearShowcases();
         if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=cell?4.0:(bench?3.4:(mol?3.5:2.7)); orbFocus.copy(cell?new THREE.Vector3(0,1.6,-3.0):(bench?new THREE.Vector3(0,1.55,-2.5):(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95)))); applyDesktopCam(); } }
-      else { if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); }
+      else { clearShowcases(); orbitOn=false; applyDesktopCam(); }
       const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol||bench||cell) && !renderer.xr.isPresenting);
       const bkb=document.getElementById('backBtn'); if(bkb){ const showBack = tbl && window.__benchReturn && !renderer.xr.isPresenting; bkb.textContent = window.tableEditMode? '\u2713 done \u2014 back to bench' : '\u2190 back to bench'; bkb.classList.toggle('show', !!showBack); if(!tbl) window.__benchReturn=false; }
       if(bench||cell){ ctrlHover=null; drawCtrl(); }
@@ -1951,6 +1986,12 @@
             let o=null; if(hs.length&&hs[0].uv){ o=cellAtUV(hs[0].uv.x,hs[0].uv.y); } const hz=o?o[0]:0;
             if(hz && hz!==hoverZ){ hoverZ=hz; drawTable(); }
             if(trig&&!ud.trigPrev&&o){ showElement(o); }
+            if(ud.tgrab && (ud.tgrab.free || !ud.tgrab.showcase)) ud.tgrab=null;   // dropped/cleared elsewhere
+            // grab a shown atom to move it; the thumbstick push/pulls the grabbed one (object-dependent)
+            if(grip&&!ud.gripPrev && !ud.tgrab){ ud.tgrab=grabShowcase(c); }
+            if(!grip&&ud.gripPrev && ud.tgrab){ ud.tgrab.grabbedBy=null; ud.tgrab=null; }
+            if(ud.tgrab){ const ax=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0); if(Math.abs(ax)>0.12){ ud.tgrab.grabDist=Math.max(0.5,Math.min(20.0, ud.tgrab.grabDist - ax*4.0*dt)); } }
+            const altT=!!(gp.buttons[5]&&gp.buttons[5].pressed); if(altT&&!ud.altPrev){ if(ud.tgrab){ const g=ud.tgrab; g.showcase=false; g.dissolving=true; g.grabbedBy=null; const ix=showcaseBodies.indexOf(g); if(ix>=0) showcaseBodies.splice(ix,1); if(showcase===g) showcase=showcaseBodies.length?showcaseBodies[showcaseBodies.length-1]:null; ud.tgrab=null; } } ud.altPrev=altT;
             ud.trigPrev=trig; ud.gripPrev=grip; continue; }
           if(mode==='mol'){ poseOf(c,_o,_d); ray.set(_o,_d.clone().normalize()); const hs=ray.intersectObject(molShelf,false);
             let mh=-1; if(hs.length&&hs[0].uv){ mh=molAtUV(hs[0].uv.x,hs[0].uv.y); }
@@ -1970,9 +2011,9 @@
               const px=ch[0].uv.x*720, py=(1-ch[0].uv.y)*760; let hit=null;
               for(const b of ctrlButtons){ if(inRect(px,py,b.r)){ hit=b; break; } }
               const hid=hit?hit.id:null; if(hid!==ctrlHover){ ctrlHover=hid; drawCtrl(); }
-              if(trig&&!ud.trigPrev&&hit){ hit.fn(); } }
-            if(mode==='bench'){ const ax=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0);
-              if(Math.abs(ax)>0.15){ const maxS=Math.max(0,benchContentH-(702-84)); const ns=Math.max(0,Math.min(maxS, benchScrollY - ax*900*dt)); if(ns!==benchScrollY){ benchScrollY=ns; drawCtrl(); } } }
+              if(trig&&!ud.trigPrev&&hit){ hit.fn(); }
+              if(mode==='bench'){ const ax=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0);   // scroll ONLY while pointing at the panel
+                if(Math.abs(ax)>0.15){ const maxS=Math.max(0,benchContentH-(702-84)); const ns=Math.max(0,Math.min(maxS, benchScrollY - ax*900*dt)); if(ns!==benchScrollY){ benchScrollY=ns; drawCtrl(); } } } }
             ud.trigPrev=trig; ud.gripPrev=grip; continue; }
           if(trig&&!ud.trigPrev){ poseOf(c,_o,_d); intersectSea(_o,_d,_spot); ud.active=spawnBody(c,_spot); ud.last=ud.active; }
           if(!trig&&ud.trigPrev){ toPending(ud.active); ud.active=null; }
