@@ -53,7 +53,7 @@
   #benchPanel .shelf.on{border-color:rgba(236,183,78,0.85);background:rgba(212,160,73,0.16);color:#ffe2a6;}
   #benchPanel .seeTable{font-size:11px;color:#6f9fd0;cursor:pointer;margin:5px 2px 0;text-decoration:none;}
   #benchPanel .seeTable:hover{color:#9fc4ee;}
-  #benchPanel .pickempty{font-size:12px;color:#5f7299;font-style:italic;padding:4px 2px;}
+  #benchPanel .pickname{font-size:13px;color:#ffe2a6;margin:4px 2px 0;min-height:16px;}
   #benchPanel .amtlbl{font-size:11px;color:#7f8db0;letter-spacing:.05em;text-transform:uppercase;}
   #benchPanel .amtbtn{width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:16px;color:#cdd9ef;background:rgba(74,144,212,0.12);border:1px solid rgba(160,180,210,0.18);line-height:1;}
   #benchPanel .amtbtn:hover{border-color:rgba(236,183,78,0.6);}
@@ -162,6 +162,7 @@
     <div class="shelfrow" id="benchShelves"></div>
     <div class="row" id="benchPicker"></div>
     <div class="seeTable" id="seeTable">see the layout on the periodic table &#8594;</div>
+    <div class="pickname" id="pickName"></div>
     <div class="addrow"><span class="amtlbl">qty</span><button class="amtbtn" id="qtyMinus">&#8722;</button><span class="amtval" id="qtyVal">1</span><button class="amtbtn" id="qtyPlus">+</button><button id="benchAdd">Add &#8594;</button></div>
     <div class="lbl" style="margin-top:10px;">Your mix</div>
     <div id="benchMix" class="mixlist"><div class="mixempty">pick an agent, set a quantity, add it</div></div>
@@ -1165,51 +1166,56 @@
     function drawBenchInfo(){ const x=bictx; x.clearRect(0,0,BIW,BIH);
       x.fillStyle='rgba(9,12,20,0.96)'; rrect(x,6,6,BIW-12,BIH-12,22); x.fill();
       x.strokeStyle='rgba(212,160,73,0.4)'; x.lineWidth=2; rrect(x,6,6,BIW-12,BIH-12,22); x.stroke();
-      const A=getReagent(benchA), B=getReagent(benchB); x.textAlign='left';
-      x.fillStyle='#e7eefc'; x.font='400 50px Georgia, serif'; x.fillText(A.name+'  +  '+B.name, 44, 90);
+      x.textAlign='left';
+      // title reflects the mix the user has built (full names), not just two atoms
+      var mixTitle = benchMix.length ? benchMix.map(function(it){ var rr=getReagent(it.key); return (it.qty>1?it.qty+' ':'')+(rr?rr.name:it.key); }).join('  +  ') : 'Your bench';
+      x.fillStyle='#e7eefc'; x.font='400 44px Georgia, serif'; x.fillText(mixTitle, 44, 84);
+      let y=132;
 
+      // ---- chemistry-lab recipe card FIRST (always visible): balanced equation + conditions + hazard ----
+      var cardShown=false;
+      try{
+        if(window.CHEM && benchMix.length){ const reag=chemReagents();
+          const ms=chemRun(reag).filter(function(m){return m.times>0;});
+          if(ms.length){ cardShown=true; const m=ms[0], rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
+            x.fillStyle='#ecb74e'; x.font='600 27px system-ui, sans-serif'; x.fillText('\u2697  '+rx.name+'   [balanced \u00d7'+m.times+']',44,y); y+=42;
+            x.fillStyle='#e7eefc'; x.font='400 30px system-ui, sans-serif'; x.fillText(chemEqn(rx),44,y); y+=42;
+            var pline=Object.keys(rx.p).map(function(s){ var mol=CHEM.MOL[s]; var mm=(mol&&mol.M!=null)?(' M=+'+mol.M.toFixed(4)):' (ionic \u2014 no closure)'; return (rx.p[s]>1?rx.p[s]:'')+s+mm; }).join('   ');
+            x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('products: '+pline+'   [measured]',44,y); y+=36;
+            var lk=Object.keys(m.leftover||{}); if(lk.length){ x.fillStyle='#c89b6a'; x.font='300 24px system-ui, sans-serif';
+              x.fillText('left over: '+lk.map(function(s){return m.leftover[s]+' '+s;}).join(', ')+'   \u2014 ratio wasn\u2019t exact',44,y); y+=36; }
+            if(rx.cond){ x.fillStyle='#7f8db0'; x.font='300 23px system-ui, sans-serif'; x.fillText('conditions: '+rx.cond+'   [known chemistry]',44,y); y+=34;
+              var need=rx.cond.toLowerCase(); var wants=[];
+              if(/spark|ignit|light|flame/.test(need)) wants.push('spark'); if(/heat|\u00b0c|roast/.test(need)) wants.push('heat');
+              if(/pressure|compress/.test(need)) wants.push('pressure'); if(/catalyst/.test(need)) wants.push('catalyst'); if(/aqueous|water/.test(need)) wants.push('water');
+              var miss=wants.filter(function(w){return !benchCond[w];});
+              if(wants.length){ if(miss.length){ x.fillStyle='#c89b6a'; x.font='300 22px system-ui, sans-serif'; x.fillText('your bench: still needs '+miss.join(', ')+'  \u2014 set the knobs to make it go',44,y); }
+                else { x.fillStyle='#7fb27f'; x.font='300 22px system-ui, sans-serif'; x.fillText('your bench: conditions met \u2713',44,y); } y+=34; } }
+            if(rec&&rec.hazards){ x.fillStyle='#e0696b'; x.font='600 22px system-ui, sans-serif'; var hw=('\u26a0 '+rec.hazards).split(' '); var hl='',hy=y; var hmw=BIW-100;
+              for(var i=0;i<hw.length;i++){ var tt=hl?hl+' '+hw[i]:hw[i]; if(x.measureText(tt).width>hmw){ x.fillText(hl,44,hy); hl=hw[i]; hy+=28; } else hl=tt; } x.fillText(hl,44,hy); y=hy+38; } }
+          else { const tried=chemRun(reag).filter(function(mm){return mm.times===0;});
+            if(tried.length){ cardShown=true; x.fillStyle='#c89b6a'; x.font='300 24px system-ui, sans-serif';
+              x.fillText('\u2697  '+tried[0].rx.name+': not enough '+tried[0].short.join(', ')+' for the ratio \u2014 add more',44,y); y+=38; } }
+        }
+      }catch(e){ /* recipe card is additive; never break the panel */ }
+      if(!cardShown){ x.fillStyle='#9fb3d6'; x.font='300 26px system-ui, sans-serif';
+        x.fillText(benchMix.length?'Press React to combine your mix.':'Add reagents from the shelf, set amounts, then React.',44,y); y+=44; }
+
+      const A=getReagent(benchA), B=getReagent(benchB);
       const r=benchResult;
-      let y=150;
-      if(!r){ x.fillStyle='#9fb3d6'; x.font='300 27px system-ui, sans-serif'; x.fillText('Bring two closures together and watch what the substrate does.',44,y); y+=44;
-        x.fillText('Press React.',44,y); y+=40; }
-      else if(r.couples){ x.fillStyle=r.violent?'#e8a04a':'#7fb27f'; x.font='600 30px system-ui, sans-serif';
+      if(r && !cardShown && r.couples){ x.fillStyle=r.violent?'#e8a04a':'#7fb27f'; x.font='600 30px system-ui, sans-serif';
         x.fillText((r.violent?'\u26a1 reacts hard \u2014 ':'\u2713 they couple \u2014 ')+(r.kind==='ionic'?'ionic closure':'covalent closure'),44,y); y+=46;
         if(r.product){ x.fillStyle='#e7eefc'; x.font='500 34px system-ui, sans-serif'; x.fillText('\u2192  '+r.product.name+'   '+r.product.f,44,y); y+=44;
           if(r.product.M!=null){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('substrate-sustained  M = +'+r.product.M.toFixed(4)+(r.product.sd!=null?'  \u00b1 '+r.product.sd.toFixed(4)+'  (N=5)':'')+'   \u00b7   real 3D, 128\u00b3 lattice',44,y); y+=38; }
           else if(r.product.committed!=null){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('substrate-sustained  M = +'+r.product.committed.toFixed(4)+'   \u00b7   real 3D, measured closure',44,y); y+=38; }
           if(r.product.conceptual){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.conceptual+')',44,y); y+=34; }
           if(r.product.note){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('('+r.product.note+')',44,y); y+=34; } }
-      } else if(r.kind==='uncurated'){ x.fillStyle='#9fb3d6'; x.font='600 28px system-ui, sans-serif'; x.fillText('\u2014 beyond the curated set',44,y); y+=44;
-      } else { x.fillStyle='#6fb0e0'; x.font='600 30px system-ui, sans-serif'; x.fillText('\u2014 no reaction',44,y); y+=44; }
+      } else if(r && !cardShown && r.kind==='uncurated'){ x.fillStyle='#9fb3d6'; x.font='600 28px system-ui, sans-serif'; x.fillText('\u2014 beyond the curated set',44,y); y+=44;
+      } else if(r && !cardShown){ x.fillStyle='#6fb0e0'; x.font='600 30px system-ui, sans-serif'; x.fillText('\u2014 no reaction',44,y); y+=44; }
 
-      if(r){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; const words=r.reason.split(' '); let line='',yy=y; const maxw=BIW-100;
+      if(r && !cardShown){ x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; const words=r.reason.split(' '); let line='',yy=y; const maxw=BIW-100;
         for(const w of words){ const tt=line?line+' '+w:w; if(x.measureText(tt).width>maxw){ x.fillText(line,44,yy); line=w; yy+=34; } else line=tt; } x.fillText(line,44,yy); y=yy+30; }
 
-      // ---- chemistry-lab recipe card: balanced equation + conditions + hazard (engine-driven, all guarded) ----
-      try{
-        if(window.CHEM){ const reag=chemReagents();
-          const ms=chemRun(reag).filter(function(m){return m.times>0;});
-          if(ms.length){ const m=ms[0], rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
-            y+=8; x.fillStyle='#ecb74e'; x.font='600 25px system-ui, sans-serif'; x.fillText('\u2697  '+rx.name+'   [balanced \u00d7'+m.times+']',44,y); y+=38;
-            x.fillStyle='#e7eefc'; x.font='400 27px system-ui, sans-serif'; x.fillText(chemEqn(rx),44,y); y+=38;
-            var pline=Object.keys(rx.p).map(function(s){ var mol=CHEM.MOL[s]; var mm=(mol&&mol.M!=null)?(' M=+'+mol.M.toFixed(4)):' (ionic \u2014 no closure)'; return (rx.p[s]>1?rx.p[s]:'')+s+mm; }).join('   ');
-            x.fillStyle='#9fb3d6'; x.font='300 22px system-ui, sans-serif'; x.fillText('products: '+pline+'   [measured]',44,y); y+=34;
-            var lk=Object.keys(m.leftover||{}); if(lk.length){ x.fillStyle='#c89b6a'; x.font='300 22px system-ui, sans-serif';
-              x.fillText('left over: '+lk.map(function(s){return m.leftover[s]+' '+s;}).join(', ')+'   \u2014 ratio wasn\u2019t exact',44,y); y+=34; }
-            if(rx.cond){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif'; x.fillText('conditions: '+rx.cond+'   [known chemistry \u2014 not from the substrate]',44,y); y+=34;
-              var need=rx.cond.toLowerCase(); var wants=[]; 
-              if(/spark|ignit|light|flame/.test(need)) wants.push('spark'); if(/heat|\u00b0c|roast/.test(need)) wants.push('heat');
-              if(/pressure|compress/.test(need)) wants.push('pressure'); if(/catalyst/.test(need)) wants.push('catalyst'); if(/aqueous|water/.test(need)) wants.push('water');
-              var miss=wants.filter(function(w){return !benchCond[w];});
-              if(wants.length){ if(miss.length){ x.fillStyle='#c89b6a'; x.font='300 21px system-ui, sans-serif'; x.fillText('your bench: still needs '+miss.join(', ')+'  \u2014 set the knobs to make it go',44,y); }
-                else { x.fillStyle='#7fb27f'; x.font='300 21px system-ui, sans-serif'; x.fillText('your bench: conditions met \u2713',44,y); } y+=32; } }
-            if(rec&&rec.hazards){ x.fillStyle='#e0696b'; x.font='600 21px system-ui, sans-serif'; var hw=('\u26a0 '+rec.hazards).split(' '); var hl='',hy=y; var hmw=BIW-100;
-              for(var i=0;i<hw.length;i++){ var tt=hl?hl+' '+hw[i]:hw[i]; if(x.measureText(tt).width>hmw){ x.fillText(hl,44,hy); hl=hw[i]; hy+=28; } else hl=tt; } x.fillText(hl,44,hy); y=hy+34; } }
-          else { const tried=chemRun(reag).filter(function(m){return m.times===0;});
-            if(tried.length){ x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif';
-              x.fillText('\u2697  '+tried[0].rx.name+': not enough '+tried[0].short.join(', ')+' for the ratio \u2014 add more',44,y); y+=34; } }
-        }
-      }catch(e){ /* recipe card is additive; never break the panel */ }
 
       // the spectrum panel — the honest object, shown through the chosen lens
       const showKey = (r&&r.couples&&r.product)? r.product.spec : null;
@@ -1258,7 +1264,8 @@
         else { const j=Math.min(1,(bt-0.7)/0.9); closA.center.lerpVectors(new THREE.Vector3(benchCenter.x-near,benchCenter.y,benchCenter.z), closA.home, j); closB.center.lerpVectors(new THREE.Vector3(benchCenter.x+near,benchCenter.y,benchCenter.z), closB.home, j); if(j>=1) bphase='idle-inert'; } }
       driveClosure(closA,dt); driveClosure(closB,dt); driveClosure(closP,dt); }
 
-    function refreshPicker(){ document.querySelectorAll('#benchPicker .chip').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-key')===benchPick); }); }
+    function refreshPicker(){ document.querySelectorAll('#benchPicker .chip').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-key')===benchPick); });
+      const pn=document.getElementById('pickName'); if(pn){ const rr=getReagent(benchPick); pn.textContent=rr?('selected: '+rr.name):''; } }
     function renderMix(){ const box=document.getElementById('benchMix'); if(!box) return; box.innerHTML='';
       if(!benchMix.length){ box.innerHTML='<div class="mixempty">pick an agent, set a quantity, add it</div>'; return; }
       benchMix.forEach(function(it,idx){ const r=getReagent(it.key); const nm=r?r.name:it.key; const sym=r?(r.sym||it.key):it.key;
