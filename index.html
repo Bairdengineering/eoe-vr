@@ -179,7 +179,7 @@
     <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">substrate</span></div>
     <div><b>&chi;s &minus; &lambda;</b> &nbsp; <span id="hudHeld">0 held</span></div>
   </div>
-  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 30 &middot; 2026-06-02</div>
+  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 31 &middot; 2026-06-02</div>
   </div>
 
   <div id="molPicker"><div class="hd">Molecules</div><div id="molList"></div></div>
@@ -259,7 +259,7 @@
       <div class="spd" data-v="1.0">Normal</div>
       <div class="spd" data-v="1.8">Fast</div>
     </div>
-    <div style="font-size:12px;color:#5f7299;margin-top:8px;line-height:1.6;">Bodies start slow so you see the twist, then accelerate. In VR, push the thumbstick up while feeding to speed up the one you're making.</div>
+    <div style="font-size:12px;color:#5f7299;margin-top:8px;line-height:1.6;">Bodies form on their own. In VR, push the thumbstick while feeding to slow it down and watch it come together as slowly as you like.</div>
     <h3>Settings</h3>
     <div class="ctrl" style="align-items:center;"><b>Cosmos</b><input id="cosmosSlider" type="range" min="0" max="150" value="100" style="flex:1;"><span id="cosmosVal" style="font-size:12px;color:#e7eefc;min-width:40px;text-align:right;">100%</span></div>
     <div style="font-size:12px;color:#5f7299;margin-top:4px;line-height:1.6;">Brightness of the world around you &mdash; a live substrate field running M = &chi;s &minus; &lambda; in every cell, gold where closures hold, blue where matter dissolves. Slide to 0 to hide it.</div>
@@ -565,7 +565,7 @@
       head('THIS SCREEN');
       row('Trigger','Point at the sea, hold to draw matter up. Longer hold = bigger body.');
       row('Grip','While a body floats, squeeze to hold it. Squeeze at a held body to grab it.');
-      row('Thumbstick','Reel a held body in or out. While feeding, push up to speed the spin-up.');
+      row('Thumbstick','Reel a held body in or out. While feeding, push the stick to slow the spin-up so you can watch it form.');
       row('Together','Hold two bodies near each other; they couple and balance. Three close a ring.');
       y+=8; head('MODES');
       menuRectS=[48,y-26,624,54]; mctx.fillStyle=(hover==='sandbox')?'rgba(236,183,78,0.34)':'rgba(212,160,73,0.14)'; rr(48,y-26,624,54,10); mctx.fill(); mctx.fillStyle='#e7eefc'; mctx.font='500 26px system-ui, sans-serif'; mctx.fillText('Substrate Sandbox',72,y+10);
@@ -751,7 +751,11 @@
       if(Z>=89&&Z<=103) return [x0+(2+(Z-89))*(cw+pad), y0+8*(chh+pad)+34];
       return [x0+(o[3]-1)*(cw+pad), y0+(o[4]-1)*(chh+pad)]; }
     const cells=ELEM.map(function(o){ const p=cellPos(o); return {o:o,x:p[0],y:p[1]}; });
-    function cellAtUV(u,v){ const px=u*TBLW, py=(1-v)*TBLH; for(const c of cells){ if(px>=c.x&&px<=c.x+cw&&py>=c.y&&py<=c.y+chh) return c.o; } return null; }
+    function cellAtUV(u,v){ const px=u*TBLW, py=(1-v)*TBLH;
+      for(const c of cells){ if(px>=c.x&&px<=c.x+cw&&py>=c.y&&py<=c.y+chh) return c.o; }       // exact hit first
+      let best=null,bd=1e9; for(const c of cells){ const dx=px-(c.x+cw/2), dy=py-(c.y+chh/2); const d=dx*dx+dy*dy; if(d<bd){ bd=d; best=c; } }  // else snap to nearest cell within ~one cell
+      if(best && bd < (cw*0.95)*(cw*0.95)) return best.o;
+      return null; }
     function drawTable(){ tctx.clearRect(0,0,TBLW,TBLH);
       var editing = (typeof window!=='undefined' && window.tableEditMode);
       tctx.textAlign='left'; tctx.fillStyle='#e7eefc'; tctx.font='400 42px Georgia, serif'; tctx.fillText(editing?'Build your shelf':'The Elements',x0,54);
@@ -1991,7 +1995,7 @@
             ud.trigPrev=trig; ud.gripPrev=grip; continue; }
           if(mode==='table'){ poseOf(c,_o,_d); ray.set(_o,_d.clone().normalize()); const hs=ray.intersectObject(tablePlane,false);
             let o=null; if(hs.length&&hs[0].uv){ o=cellAtUV(hs[0].uv.x,hs[0].uv.y); } const hz=o?o[0]:0;
-            if(hz && hz!==hoverZ){ hoverZ=hz; drawTable(); }
+            if(hz!==hoverZ){ hoverZ=hz; drawTable(); }
             if(trig&&!ud.trigPrev&&o){ showElement(o); }
             if(ud.tgrab && (ud.tgrab.free || !ud.tgrab.showcase)) ud.tgrab=null;   // dropped/cleared elsewhere
             // grab a shown atom to move it; the thumbstick push/pulls the grabbed one (object-dependent)
@@ -2029,7 +2033,7 @@
           if(!grip&&ud.gripPrev){ if(ud.grabbing){ ud.grabbing.grabbedBy=null; ud.grabbing=null; } }
           ud.gripPrev=grip;
           if(ud.grabbing){ const ax=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0); if(Math.abs(ax)>0.12){ ud.grabbing.grabDist=Math.max(0.5,Math.min(30.0, ud.grabbing.grabDist - ax*6.0*dt)); } }
-          if(ud.active && !ud.grabbing){ const ay=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0); ud.active.feedBoost=Math.max(0,-ay)*2.2; }
+          if(ud.active && !ud.grabbing){ const ay=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0); const sd=Math.abs(ay)>0.12?Math.min(1,(Math.abs(ay)-0.12)/0.88):0; ud.active.feedBoost=-0.92*sd; }  // push the stick to SLOW the spin-up (down to a crawl); released = full speed
           const altBtn=!!(gp.buttons[5]&&gp.buttons[5].pressed); if(altBtn&&!ud.altPrev){ if(ud.grabbing){ ud.grabbing.held=false; ud.grabbing.dissolving=true; ud.grabbing.grabbedBy=null; ud.grabbing=null; } else dissolveAimed(c); } ud.altPrev=altBtn;
         }
       }
