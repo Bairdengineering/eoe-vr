@@ -822,13 +822,13 @@
     const mbPts=new THREE.Points(mbGeo,new THREE.PointsMaterial({map:whiteDotTex(),color:0xffffff,vertexColors:true,size:0.06,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true})); mbPts.frustumCulled=false; mbPts.visible=false; scene.add(mbPts);
 
     // shelf plane
-    const MSW=1500,MSH=560; const mscv=document.createElement('canvas'); mscv.width=MSW; mscv.height=MSH; const msctx=mscv.getContext('2d');
+    const MSW=1700,MSH=800; const mscv=document.createElement('canvas'); mscv.width=MSW; mscv.height=MSH; const msctx=mscv.getContext('2d');
     const mstex=new THREE.CanvasTexture(mscv);
     const molShelf=new THREE.Mesh(new THREE.PlaneGeometry(2.2,2.2*MSH/MSW), new THREE.MeshBasicMaterial({map:mstex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     molShelf.renderOrder=15; molShelf.position.set(0,2.05,-2.85); molGroup.add(molShelf);
-    const mcw=346,mch=150,mpadx=24,mpady=22,mx0=30,my0=96, MCOLS=4;
+    const mcw=308,mch=150,mpadx=24,mpady=22,mx0=30,my0=96, MCOLS=5;
     const molCells=MOL.map(function(m,idx){ const col=idx%MCOLS, row=(idx/MCOLS)|0; return {idx:idx, x:mx0+col*(mcw+mpadx), y:my0+row*(mch+mpady)}; });
-    function molAtUV(u,v){ const px=u*MSW, py=(1-v)*MSH; for(const c of molCells){ if(px>=c.x&&px<=c.x+mcw&&py>=c.y&&py<=c.y+mch) return c.idx; } return -1; }
+    function molAtUV(u,v){ const px=u*MSW, py=(1-v)*MSH; const ex=mpadx/2, ey=mpady/2; for(const c of molCells){ if(px>=c.x-ex&&px<=c.x+mcw+ex&&py>=c.y-ey&&py<=c.y+mch+ey) return c.idx; } return -1; }
     function molAvgMn(m){ let s=0; for(const a of m.atoms) s+=a.mn; return s/m.atoms.length; }
     function drawMolShelf(){ msctx.clearRect(0,0,MSW,MSH);
       msctx.textAlign='left'; msctx.fillStyle='#e7eefc'; msctx.font='400 44px Georgia, serif'; msctx.fillText('Molecules',mx0,56);
@@ -836,9 +836,9 @@
       for(const c of molCells){ const m=MOL[c.idx], sel=c.idx===molSel, hov=c.idx===molHover;
         msctx.globalAlpha=sel?0.9:(hov?0.6:0.3); msctx.fillStyle=mcol(molAvgMn(m)); rrect(msctx,c.x,c.y,mcw,mch,12); msctx.fill(); msctx.globalAlpha=1;
         msctx.strokeStyle=sel?'#ecb74e':(hov?'rgba(236,183,78,0.8)':'rgba(160,180,210,0.22)'); msctx.lineWidth=sel?3.5:1.4; rrect(msctx,c.x,c.y,mcw,mch,12); msctx.stroke();
-        msctx.fillStyle='#0a0e16'; msctx.textAlign='left'; msctx.font='600 38px system-ui, sans-serif'; msctx.fillText(m.n,c.x+22,c.y+58);
-        msctx.font='500 30px system-ui, sans-serif'; msctx.fillStyle='rgba(10,14,22,0.82)'; msctx.fillText(m.f,c.x+22,c.y+104);
-        { const Mv=(m.M!=null?m.M:0); msctx.textAlign='right'; msctx.font='700 26px system-ui, sans-serif'; msctx.fillStyle='rgba(10,14,22,0.92)'; msctx.fillText('M '+(Mv>=0?'+':'')+Mv.toFixed(2), c.x+mcw-22, c.y+104); msctx.textAlign='left';
+        msctx.fillStyle='#0a0e16'; msctx.textAlign='left'; let nf=36; msctx.font='600 '+nf+'px system-ui, sans-serif'; while(nf>20 && msctx.measureText(m.n).width>mcw-40){ nf-=2; msctx.font='600 '+nf+'px system-ui, sans-serif'; } msctx.fillText(m.n,c.x+22,c.y+56);
+        { const Mv=(m.M!=null?m.M:0); const Mtxt='M '+(Mv>=0?'+':'')+Mv.toFixed(2); msctx.textAlign='right'; msctx.font='700 24px system-ui, sans-serif'; msctx.fillStyle='rgba(10,14,22,0.92)'; msctx.fillText(Mtxt, c.x+mcw-22, c.y+104); const mw=msctx.measureText(Mtxt).width;
+          msctx.textAlign='left'; let ff=28; const fmax=mcw-44-mw-14; msctx.font='500 '+ff+'px system-ui, sans-serif'; while(ff>16 && msctx.measureText(m.f).width>fmax){ ff-=2; msctx.font='500 '+ff+'px system-ui, sans-serif'; } msctx.fillStyle='rgba(10,14,22,0.82)'; msctx.fillText(m.f,c.x+22,c.y+104);
           const bx=c.x+22, by=c.y+122, bw=mcw-44, bh=9; msctx.fillStyle='rgba(10,14,22,0.30)'; rrect(msctx,bx,by,bw,bh,4); msctx.fill(); msctx.fillStyle='#ecb74e'; rrect(msctx,bx,by,bw*clamp01(Mv/0.95),bh,4); msctx.fill(); }
         msctx.textAlign='right'; msctx.font='700 16px system-ui, sans-serif'; msctx.fillStyle=m.r3d?'rgba(126,178,127,0.95)':'rgba(160,180,210,0.5)'; msctx.fillText(m.r3d?'real 3D \u00b7 N=5':'earlier calib.', c.x+mcw-20, c.y+32); msctx.textAlign='left'; }
       mstex.needsUpdate=true; }
@@ -1935,7 +1935,7 @@
             ud.trigPrev=trig; ud.gripPrev=grip; continue; }
           if(mode==='mol'){ poseOf(c,_o,_d); ray.set(_o,_d.clone().normalize()); const hs=ray.intersectObject(molShelf,false);
             let mh=-1; if(hs.length&&hs[0].uv){ mh=molAtUV(hs[0].uv.x,hs[0].uv.y); }
-            if(mh>=0 && mh!==molHover){ molHover=mh; drawMolShelf(); }
+            if(mh!==molHover){ molHover=mh; drawMolShelf(); }
             if(trig&&!ud.trigPrev&&mh>=0){ buildMolecule(mh); }
             if(grip&&!ud.gripPrev && curMol && molGrab===null){ molGrab=c; c.getWorldPosition(_mPos); c.getWorldQuaternion(_mQuat);
               const inv=_mQuat.clone().invert(); _mRelQuat.copy(inv).multiply(molQuat);
