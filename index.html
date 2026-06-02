@@ -83,6 +83,10 @@
   #benchPanel .tool.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.18);color:#ffe2a6;}
   #benchPanel #benchClear{margin-top:6px;background:rgba(74,144,212,0.10);color:#9fb3d6;}
   #benchPanel #bookBtn{margin-top:6px;background:rgba(126,178,127,0.12);color:#cfe6cf;border:1px solid rgba(126,178,127,0.3);}
+  #benchPanel #benchSave{margin-top:6px;background:rgba(212,160,73,0.12);color:#ffe2a6;border:1px solid rgba(212,160,73,0.3);}
+  #benchPanel #saveRow{display:flex;flex-direction:column;gap:5px;margin-top:6px;}
+  #benchPanel #saveRow select,#benchPanel #saveRow input{font-size:13px;padding:5px 8px;border-radius:7px;background:rgba(74,144,212,0.10);border:1px solid rgba(160,180,210,0.18);color:#e7eefc;}
+  #benchPanel #saveConfirm{font-size:13px;padding:6px;border-radius:7px;background:rgba(126,178,127,0.16);border:1px solid rgba(126,178,127,0.4);color:#cfe6cf;cursor:pointer;}
   #benchPanel .proftoggle{font-size:12px;color:#d8c089;cursor:pointer;margin:8px 2px 0;}
   #benchPanel .proftoggle:hover{color:#ecb74e;}
   #benchPanel .proftoggle #profState{font-weight:600;}
@@ -201,6 +205,12 @@
     </div>
     <button id="benchReact">React</button>
     <button id="benchClear">Clear</button>
+    <button id="benchSave">&#128194; Save to project</button>
+    <div id="saveRow" style="display:none;">
+      <select id="saveFolder"></select>
+      <input id="saveNewFolder" type="text" placeholder="or new folder name" />
+      <button id="saveConfirm">Save</button>
+    </div>
     <button id="bookBtn">&#128210; Lab journal</button>
     <div class="proftoggle" id="profToggle">&#127891; professor: <span id="profState">on</span></div>
     <div class="lbl" style="margin-top:12px;">Lens of vision</div>
@@ -1241,6 +1251,21 @@
     // lab journal — every reaction you run, saved as a re-loadable working entry.
     // picking one loads its mix + conditions back onto the bench to keep experimenting.
     let formulaBook=[];
+    // projects — deliberate keepers, grouped into named folders (the journal auto-logs; projects you choose)
+    let projects={};  // { folderName: [ {name,eqn,mix,cond,heat,press,prods,hazard} ] }
+    function currentResultForSave(){ try{ if(!window.CHEM || !benchMix.length) return null; const reag=chemReagents();
+        const ms=chemRun(reag).filter(function(m){return m.times>0;}); const mixCopy=benchMix.map(function(it){return {key:it.key,qty:it.qty};});
+        const condCopy={}; for(const k in benchCond) condCopy[k]=benchCond[k];
+        if(ms.length){ const m=ms[0],rx=m.rx,rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
+          return {name:rx.name, eqn:chemEqn(rx), mix:mixCopy, cond:condCopy, heat:benchHeat, press:benchPress,
+                  prods:Object.keys(rx.p).map(function(s){var mol=CHEM.MOL[s];return {f:s,M:(mol&&mol.M!=null)?mol.M:null};}), hazard:rec?rec.hazards:''}; }
+        var rawmix={}; benchMix.forEach(function(it){ rawmix[it.key]=(rawmix[it.key]||0)+it.qty; }); var en=enumerateClosure(rawmix);
+        if(en.closes){ var mixStr=Object.keys(rawmix).map(function(k){return (rawmix[k]>1?rawmix[k]:'')+k;}).join(' + ');
+          return {name:en.match||'my mix', eqn:mixStr+(en.match?' → '+en.match:' → closes'), mix:mixCopy, cond:condCopy, heat:benchHeat, press:benchPress, prods:[], hazard:''}; }
+        return null; }catch(e){ return null; } }
+    function saveToProject(folder, entry){ if(!folder||!entry) return; if(!projects[folder]) projects[folder]=[];
+      if(projects[folder].some(function(e){return e.eqn===entry.eqn;})) return; projects[folder].push(entry);
+      var bp=document.getElementById('bookPanel'); if(bp&&bp.classList.contains('show')) renderBook(); }
     function mixSig(){ return benchMix.map(function(it){return it.qty+it.key;}).join('+')+'|h'+benchHeat+'p'+benchPress+'|'+Object.keys(benchCond).filter(function(k){return benchCond[k];}).sort().join(','); }
     function bookAdd(){ try{ if(!window.CHEM || !benchMix.length) return; const reag=chemReagents();
         const ms=chemRun(reag).filter(function(m){return m.times>0;});
@@ -1264,6 +1289,13 @@
       benchResult=null; syncBenchAB(); renderMix&&renderMix(); refreshTools&&refreshTools(); drawBenchInfo();
       const bp=document.getElementById('bookPanel'); if(bp) bp.classList.remove('show'); }
     function renderBook(){ const box=document.getElementById('bookList'); if(!box) return; box.innerHTML='';
+      // saved projects first, grouped by folder
+      var pf=Object.keys(projects);
+      if(pf.length){ var ph='<div class="be-name" style="color:#ffe2a6;margin-bottom:6px;">\uD83D\uDCC1 My projects</div>';
+        pf.forEach(function(folder){ ph+='<div style="font-size:13px;color:#d8c089;margin:6px 0 3px;font-weight:600;">'+folder+'</div>';
+          projects[folder].forEach(function(e){ ph+='<div class="bookentry" style="border-color:rgba(212,160,73,0.3);"><div class="be-eqn">'+e.eqn+'</div>'+(e.hazard?'<div class="be-haz">\u26a0 '+e.hazard+'</div>':'')+'</div>'; }); });
+        var hdr=document.createElement('div'); hdr.innerHTML=ph; box.appendChild(hdr);
+        var sep=document.createElement('div'); sep.className='be-name'; sep.style.cssText='margin:12px 0 6px;border-top:1px solid rgba(160,180,210,0.15);padding-top:10px;'; sep.textContent='Journal \u2014 everything you\u2019ve run'; box.appendChild(sep); }
       if(!formulaBook.length){
         var html='<div class="mixempty" style="margin-bottom:10px;">Nothing logged yet \u2014 here are the tools you have. Every reaction you run lands here to reload and re-tune.</div>';
         html+='<div class="be-name" style="margin:6px 0 4px;">Conditions you can set</div>';
@@ -1519,6 +1551,18 @@
           refreshTools(); drawBenchInfo(); }); }); }
       const rb=document.getElementById('benchReact'); if(rb) rb.addEventListener('click',function(){ runReaction(); });
       const cl=document.getElementById('benchClear'); if(cl) cl.addEventListener('click',function(){ benchMix=[]; for(const k in benchCond) benchCond[k]=false; benchHeat=20; benchPress=1; benchResult=null; renderMix(); refreshTools(); drawBenchInfo(); });
+      const sv=document.getElementById('benchSave'); const srow=document.getElementById('saveRow');
+      if(sv) sv.addEventListener('click',function(){ const entry=currentResultForSave();
+        if(!entry){ sv.textContent='\u2014 nothing to save (make it react first)'; setTimeout(function(){ sv.innerHTML='\uD83D\uDCC1 Save to project'; },1800); return; }
+        if(srow){ var sel=document.getElementById('saveFolder'); if(sel){ sel.innerHTML=''; var names=Object.keys(projects);
+          if(!names.length){ var o=document.createElement('option'); o.value=''; o.textContent='(new folder below)'; sel.appendChild(o); }
+          names.forEach(function(n){ var o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); }); }
+          srow.style.display = srow.style.display==='none'?'flex':'none'; } });
+      const sc=document.getElementById('saveConfirm'); if(sc) sc.addEventListener('click',function(){ const entry=currentResultForSave(); if(!entry) return;
+        var nf=document.getElementById('saveNewFolder'), sel=document.getElementById('saveFolder');
+        var folder=(nf&&nf.value.trim())||(sel&&sel.value)||'My Reactions';
+        saveToProject(folder, entry); if(nf) nf.value=''; if(srow) srow.style.display='none';
+        if(sv){ sv.textContent='\u2713 saved to '+folder; setTimeout(function(){ sv.innerHTML='\uD83D\uDCC1 Save to project'; },1800); } });
       const bb=document.getElementById('bookBtn'); if(bb) bb.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(!p) return; renderBook(); p.classList.toggle('show'); });
       const bc=document.getElementById('bookClose'); if(bc) bc.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(p) p.classList.remove('show'); });
       const st=document.getElementById('seeTable'); if(st) st.addEventListener('click',function(){ window.__benchReturn=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
