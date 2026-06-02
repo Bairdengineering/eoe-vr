@@ -83,6 +83,8 @@
   #bookPanel .be-sub{font-size:12px;color:#9fb3d6;}
   #bookPanel .be-cond{font-size:12px;color:#7f8db0;margin-top:2px;}
   #bookPanel .be-haz{font-size:12px;color:#e0696b;margin-top:3px;line-height:1.4;}
+  #bookPanel .be-load{font-size:12px;color:#7fb27f;cursor:pointer;margin-top:5px;font-weight:600;}
+  #bookPanel .be-load:hover{color:#a6e0a6;}
   #benchPanel .prodhead{width:100%;font-size:10px;letter-spacing:.06em;color:#7f8db0;text-transform:uppercase;margin:7px 2px 1px;}
   #benchReact{margin-top:12px;width:100%;padding:10px;border-radius:9px;cursor:pointer;text-align:center;font-size:14px;letter-spacing:.04em;color:#0a0d14;background:linear-gradient(180deg,#ecb74e,#d4a049);border:none;font-weight:600;}
   #benchReact:hover{filter:brightness(1.08);}
@@ -97,6 +99,9 @@
   #cellPanel button:hover{filter:brightness(1.08);}
   #cellPanel button.on{background:linear-gradient(180deg,#7fb27f,#5e9b5e);}
   #orbHint{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:18;color:#9fb3d6;font-size:13px;letter-spacing:.03em;background:rgba(7,9,15,0.6);padding:8px 18px;border-radius:22px;border:1px solid rgba(212,160,73,0.28);opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+  #backBtn{position:fixed;top:60px;left:14px;z-index:21;color:#ffe2a6;font-size:14px;letter-spacing:.03em;background:rgba(7,9,15,0.85);padding:8px 16px;border-radius:10px;border:1px solid rgba(236,183,78,0.5);cursor:pointer;display:none;}
+  #backBtn:hover{background:rgba(212,160,73,0.2);}
+  #backBtn.show{display:block;}
   #orbHint.show{opacity:1;}
   #optBtn{position:fixed;top:14px;right:14px;z-index:20;width:34px;height:34px;border-radius:50%;
     display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;
@@ -170,13 +175,13 @@
     <div id="benchTools" class="toolsrow"></div>
     <button id="benchReact">React</button>
     <button id="benchClear">Clear</button>
-    <button id="bookBtn">&#128211; Formula book</button>
+    <button id="bookBtn">&#128210; Lab journal</button>
     <div class="lbl" style="margin-top:12px;">Lens of vision</div>
     <div class="lensrow" id="benchLenses"></div>
   </div>
   <div id="bookPanel">
-    <div class="hd">Formula Book <span id="bookClose" title="close">&times;</span></div>
-    <div style="font-size:12px;color:#9fb3d6;margin:0 2px 8px;">Everything you&rsquo;ve successfully made &mdash; your lab notebook.</div>
+    <div class="hd">Lab Journal <span id="bookClose" title="close">&times;</span></div>
+    <div style="font-size:12px;color:#9fb3d6;margin:0 2px 8px;">Every reaction you&rsquo;ve run. Tap one to load it back onto the bench and keep tuning.</div>
     <div id="bookList" class="mixlist"></div>
   </div>
   <div id="cellPanel">
@@ -186,6 +191,7 @@
     <button id="cellNew" style="margin-top:8px;background:rgba(74,144,212,0.12);color:#cdd9ef;">New cell</button>
   </div>
   <div id="orbHint">Drag to orbit · scroll to zoom · click to build</div>
+  <div id="backBtn">&#8592; back to bench</div>
   <div id="optBtn" title="Options">&#9881;</div>
   <div id="capBtn" title="Screenshot (P) — copies to clipboard">&#128247;</div>
   <div id="capGallery"></div>
@@ -1109,25 +1115,42 @@
       bookAdd();
       drawBenchInfo(); }
 
-    // formula book — the lab notebook. Every successful catalogue reaction is saved
-    // as a full entry (equation, products+measured M, conditions, hazard), deduped by name.
+    // lab journal — every reaction you run, saved as a re-loadable working entry.
+    // picking one loads its mix + conditions back onto the bench to keep experimenting.
     let formulaBook=[];
-    function bookAdd(){ try{ if(!window.CHEM) return; const reag=chemReagents();
-        const ms=chemRun(reag).filter(function(m){return m.times>0;}); if(!ms.length) return;
-        const m=ms[0], rx=m.rx; if(formulaBook.some(function(e){return e.name===rx.name;})) return;
-        const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
-        const prods=Object.keys(rx.p).map(function(s){ const mol=CHEM.MOL[s]; return {f:s,n:mol?mol.n:s,M:(mol&&mol.M!=null)?mol.M:null}; });
-        formulaBook.push({name:rx.name, eqn:chemEqn(rx), prods:prods, cond:rx.cond||'', hazard:rec?rec.hazards:'' });
-        const bb=document.getElementById('bookBtn'); if(bb) bb.textContent='\uD83D\uDCD3 Formula book ('+formulaBook.length+')';
+    function mixSig(){ return benchMix.map(function(it){return it.qty+it.key;}).join('+')+'|'+Object.keys(benchCond).filter(function(k){return benchCond[k];}).sort().join(','); }
+    function bookAdd(){ try{ if(!window.CHEM || !benchMix.length) return; const reag=chemReagents();
+        const ms=chemRun(reag).filter(function(m){return m.times>0;});
+        const sig=mixSig(); if(formulaBook.some(function(e){return e.sig===sig;})) return;
+        const mixCopy=benchMix.map(function(it){return {key:it.key,qty:it.qty};});
+        const condCopy={}; for(const k in benchCond) condCopy[k]=benchCond[k];
+        let entry={sig:sig, mix:mixCopy, cond:condCopy, clean:false, name:'Mix', eqn:'', prods:[], hazard:'', cstr:''};
+        if(ms.length){ const m=ms[0], rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
+          entry.name=rx.name; entry.eqn=chemEqn(rx); entry.cstr=rx.cond||''; entry.hazard=rec?rec.hazards:'';
+          entry.prods=Object.keys(rx.p).map(function(s){ const mol=CHEM.MOL[s]; return {f:s,n:mol?mol.n:s,M:(mol&&mol.M!=null)?mol.M:null}; });
+          entry.clean=!Object.keys(m.leftover||{}).length; entry.leftover=m.leftover||{}; }
+        else { const t=chemRun(reag).filter(function(mm){return mm.times===0;}); entry.name=t.length?(t[0].rx.name+' (not balanced yet)'):'Mix (no reaction)'; entry.mixonly=true; }
+        formulaBook.push(entry);
+        const bb=document.getElementById('bookBtn'); if(bb) bb.textContent='\uD83D\uDCD2 Lab journal ('+formulaBook.length+')';
         const bp=document.getElementById('bookPanel'); if(bp&&bp.classList.contains('show')) renderBook();
       }catch(e){} }
+    function loadEntry(idx){ const e=formulaBook[idx]; if(!e) return;
+      benchMix=e.mix.map(function(it){return {key:it.key,qty:it.qty};});
+      for(const k in benchCond) benchCond[k]= !!(e.cond&&e.cond[k]);
+      benchResult=null; syncBenchAB(); renderMix&&renderMix(); refreshTools&&refreshTools(); drawBenchInfo();
+      const bp=document.getElementById('bookPanel'); if(bp) bp.classList.remove('show'); }
     function renderBook(){ const box=document.getElementById('bookList'); if(!box) return; box.innerHTML='';
-      if(!formulaBook.length){ box.innerHTML='<div class="mixempty">react something and it gets written here</div>'; return; }
+      if(!formulaBook.length){ box.innerHTML='<div class="mixempty">react something and it gets logged here \u2014 tap an entry to load it back and keep tuning</div>'; return; }
       formulaBook.forEach(function(e,idx){ const el=document.createElement('div'); el.className='bookentry';
+        var mixstr=e.mix.map(function(it){return it.qty+'\u00d7'+it.key;}).join(' + ');
+        var head=(e.clean?'\u2713 ':(e.mixonly?'\u270e ':'\u25cb '))+e.name;
         var ph=e.prods.map(function(p){return p.f+(p.M!=null?' (M=+'+p.M.toFixed(3)+')':'');}).join(', ');
-        el.innerHTML='<div class="be-name">'+e.name+'</div><div class="be-eqn">'+e.eqn+'</div>'+
-          '<div class="be-sub">makes: '+ph+'</div>'+(e.cond?'<div class="be-cond">needs: '+e.cond+'</div>':'')+
-          (e.hazard?'<div class="be-haz">\u26a0 '+e.hazard+'</div>':'');
+        var lo=e.leftover&&Object.keys(e.leftover).length? '<div class="be-cond">left over: '+Object.keys(e.leftover).map(function(s){return e.leftover[s]+' '+s;}).join(', ')+'</div>':'';
+        el.innerHTML='<div class="be-name">'+head+'</div><div class="be-sub" style="color:#7f8db0;">your mix: '+mixstr+'</div>'+
+          (e.eqn?'<div class="be-eqn">'+e.eqn+'</div>':'')+(ph?'<div class="be-sub">makes: '+ph+'</div>':'')+lo+
+          (e.cstr?'<div class="be-cond">needs: '+e.cstr+'</div>':'')+(e.hazard?'<div class="be-haz">\u26a0 '+e.hazard+'</div>':'')+
+          '<div class="be-load">\u2190 load back onto bench</div>';
+        el.querySelector('.be-load').addEventListener('click',function(){ loadEntry(idx); });
         box.appendChild(el); }); }
 
     // ---- spectrum strip + reading ----
@@ -1313,7 +1336,7 @@
       const cl=document.getElementById('benchClear'); if(cl) cl.addEventListener('click',function(){ benchMix=[]; for(const k in benchCond) benchCond[k]=false; benchResult=null; renderMix(); refreshTools(); drawBenchInfo(); });
       const bb=document.getElementById('bookBtn'); if(bb) bb.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(!p) return; renderBook(); p.classList.toggle('show'); });
       const bc=document.getElementById('bookClose'); if(bc) bc.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(p) p.classList.remove('show'); });
-      const st=document.getElementById('seeTable'); if(st) st.addEventListener('click',function(){ if(window.__eoeSetMode) window.__eoeSetMode('table'); });
+      const st=document.getElementById('seeTable'); if(st) st.addEventListener('click',function(){ window.__benchReturn=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
       const lr=document.getElementById('benchLenses'); if(lr){ LENSES.forEach((L,i)=>{ const el=document.createElement('div'); el.className='lensbtn'; el.textContent=L.name; el.addEventListener('click',()=>setBenchLens(i)); lr.appendChild(el); }); }
       renderMix(); refreshTools(); refreshLensButtons(); }
     buildBenchPanel();
@@ -1484,8 +1507,10 @@
         if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=cell?4.0:(bench?3.4:(mol?3.5:2.7)); orbFocus.copy(cell?new THREE.Vector3(0,1.6,-3.0):(bench?new THREE.Vector3(0,1.55,-2.5):(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95)))); applyDesktopCam(); } }
       else { if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); }
       const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol||bench||cell) && !renderer.xr.isPresenting);
+      const bkb=document.getElementById('backBtn'); if(bkb){ const showBack = tbl && window.__benchReturn && !renderer.xr.isPresenting; bkb.classList.toggle('show', !!showBack); if(!tbl) window.__benchReturn=false; }
       if(bench||cell){ ctrlHover=null; drawCtrl(); } }
     if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; }
+    (function(){ const bkb=document.getElementById('backBtn'); if(bkb) bkb.addEventListener('click',function(){ window.__benchReturn=false; setMode('bench'); }); })();
 
     function interactBodies(dt){
       const H=[]; for(const b of pool) if(!b.free && b.held && !b.showcase) H.push(b);
