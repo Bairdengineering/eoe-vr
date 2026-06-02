@@ -179,7 +179,7 @@
     <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">substrate</span></div>
     <div><b>&chi;s &minus; &lambda;</b> &nbsp; <span id="hudHeld">0 held</span></div>
   </div>
-  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 31 &middot; 2026-06-02</div>
+  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 32 &middot; 2026-06-02</div>
   </div>
 
   <div id="molPicker"><div class="hd">Molecules</div><div id="molList"></div></div>
@@ -580,7 +580,10 @@
     drawMenu();
     let menuVisible=false;
     function toggleMenu(){ menuVisible=!menuVisible; menuPanel.visible=menuVisible;
-      if(menuVisible){ menuHover=null; drawMenu(null); camera.getWorldPosition(_o); camera.getWorldDirection(_d); menuPanel.position.set(_o.x+_d.x*1.1, _o.y+_d.y*1.1-0.05, _o.z+_d.z*1.1); menuPanel.quaternion.copy(camera.getWorldQuaternion(_q)); }
+      if(menuVisible){ menuHover=null; drawMenu(null); camera.getWorldPosition(_o); camera.getWorldDirection(_d);
+        const hl=Math.hypot(_d.x,_d.z)||1; const fx=_d.x/hl, fz=_d.z/hl;   // horizontal heading only
+        menuPanel.position.set(_o.x+fx*1.1, _o.y-0.05, _o.z+fz*1.1);
+        menuPanel.rotation.set(0, Math.atan2(-fx,-fz), 0); }                // upright, faces the user, ignores head pitch/roll
       else { menuCursor.visible=false; menuHover=null; } }
 
     function phaseLabel(f){ if(f<0.04) return 'substrate'; if(f>0.95) return 'spinning'; if(f<0.30) return 'forming ring'; if(f<0.55) return 'twisting to \u221E'; if(f<0.82) return 'spinning up'; return 'becoming matter'; }
@@ -741,11 +744,11 @@
     function inRect(px,py,r){ return px>=r[0]&&px<=r[0]+r[2]&&py>=r[1]&&py<=r[1]+r[3]; }
 
     const tableGroup=new THREE.Group(); tableGroup.visible=false; scene.add(tableGroup);
-    const TBLW=1900,TBLH=1180; const tcanvas=document.createElement('canvas'); tcanvas.width=TBLW; tcanvas.height=TBLH; const tctx=tcanvas.getContext('2d');
+    const TBLW=1960,TBLH=1180; const tcanvas=document.createElement('canvas'); tcanvas.width=TBLW; tcanvas.height=TBLH; const tctx=tcanvas.getContext('2d');
     const ttex=new THREE.CanvasTexture(tcanvas);
     const tablePlane=new THREE.Mesh(new THREE.PlaneGeometry(2.45,2.45*TBLH/TBLW), new THREE.MeshBasicMaterial({map:ttex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     tablePlane.renderOrder=15; tablePlane.position.set(0,1.6,-2.7); tableGroup.add(tablePlane);
-    const cw=96,chh=96,pad=6,x0=22,y0=98;
+    const cw=96,chh=96,pad=6,x0=64,y0=98;
     function cellPos(o){ const Z=o[0];
       if(Z>=57&&Z<=71) return [x0+(2+(Z-57))*(cw+pad), y0+7*(chh+pad)+34];
       if(Z>=89&&Z<=103) return [x0+(2+(Z-89))*(cw+pad), y0+8*(chh+pad)+34];
@@ -754,7 +757,7 @@
     function cellAtUV(u,v){ const px=u*TBLW, py=(1-v)*TBLH;
       for(const c of cells){ if(px>=c.x&&px<=c.x+cw&&py>=c.y&&py<=c.y+chh) return c.o; }       // exact hit first
       let best=null,bd=1e9; for(const c of cells){ const dx=px-(c.x+cw/2), dy=py-(c.y+chh/2); const d=dx*dx+dy*dy; if(d<bd){ bd=d; best=c; } }  // else snap to nearest cell within ~one cell
-      if(best && bd < (cw*0.95)*(cw*0.95)) return best.o;
+      if(best && bd < (cw*1.3)*(cw*1.3)) return best.o;
       return null; }
     function drawTable(){ tctx.clearRect(0,0,TBLW,TBLH);
       var editing = (typeof window!=='undefined' && window.tableEditMode);
