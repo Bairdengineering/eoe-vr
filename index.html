@@ -179,7 +179,7 @@
     <div>M = <span class="m" id="hudM">+0.00</span> &nbsp; <span id="hudPhase">substrate</span></div>
     <div><b>&chi;s &minus; &lambda;</b> &nbsp; <span id="hudHeld">0 held</span></div>
   </div>
-  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 33 &middot; 2026-06-02</div>
+  <div id="buildTag" style="position:fixed;bottom:8px;left:10px;font:600 11px ui-monospace,Menlo,monospace;color:rgba(160,180,210,0.55);z-index:9999;pointer-events:none;letter-spacing:0.5px;">EoE build 34 &middot; 2026-06-02</div>
   </div>
 
   <div id="molPicker"><div class="hd">Molecules</div><div id="molList"></div></div>
@@ -1314,7 +1314,8 @@
           return {name:en.match||'my mix', eqn:mixStr+(en.match?' → '+en.match:' → closes'), mix:mixCopy, cond:condCopy, heat:benchHeat, press:benchPress, why:en.why||'', prods:[], hazard:''}; }
         return null; }catch(e){ return null; } }
     function saveToProject(folder, entry){ if(!folder||!entry) return; if(!projects[folder]) projects[folder]=[];
-      if(projects[folder].some(function(e){return e.eqn===entry.eqn;})) return; projects[folder].push(entry);
+      var i=projects[folder].findIndex(function(e){return e.eqn===entry.eqn;});
+      if(i>=0) projects[folder][i]=entry; else projects[folder].push(entry);   // refresh existing entry with the latest full card rather than skipping
       var bp=document.getElementById('bookPanel'); if(bp&&bp.classList.contains('show')) renderBook(); }
     function mixSig(){ return benchMix.map(function(it){return it.qty+it.key;}).join('+')+'|h'+benchHeat+'p'+benchPress+'|'+Object.keys(benchCond).filter(function(k){return benchCond[k];}).sort().join(','); }
     function bookAdd(){ try{ if(!window.CHEM || !benchMix.length) return; const reag=chemReagents();
@@ -1799,7 +1800,7 @@
             pf.forEach(function(folder){ txt(folder, 44, y+20, '#d8c089', '600 22px system-ui, sans-serif'); y+=32;
               (projects[folder]||[]).forEach(function(e){ B(40, y, 640, 72, '', 'pj:'+folder+':'+(e.eqn||e.name), false, (function(en){return ()=>{ loadMixEntry(en); ctrlView='bench'; benchScrollY=0; drawCtrl(); };})(e));
                 txt(fit(e.eqn||e.name, 600, '500 24px system-ui, sans-serif'), 58, y+30, '#e7eefc', '500 24px system-ui, sans-serif');
-                var sub=(e.prods&&e.prods.length)?('\u2192 '+e.prods.map(function(p){return (p.n||p.f)+(p.M!=null?' M+'+p.M.toFixed(2):'');}).join(', ')):(e.cstr||'');
+                var sub=(e.prods&&e.prods.length)?('\u2192 '+e.prods.map(function(p){return (p.n||p.f)+(p.M!=null?' M+'+p.M.toFixed(2):'');}).join(', ')):(e.cstr||e.why||'');
                 if(sub) txt(fit(sub, 600, '300 19px system-ui, sans-serif'), 58, y+58, '#9fb3d6', '300 19px system-ui, sans-serif'); y+=80; }); }); }
           hdr('\uD83D\uDCD2  AUTO-LOGGED (clean reactions)', y); y+=34;
           if(!formulaBook.length){ txt('react something clean \u2014 it logs here', 44, y+22, '#5f7299', '300 21px system-ui, sans-serif'); y+=44; }
