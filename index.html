@@ -54,6 +54,12 @@
   #benchPanel .seeTable{font-size:11px;color:#6f9fd0;cursor:pointer;margin:5px 2px 0;text-decoration:none;}
   #benchPanel .seeTable:hover{color:#9fc4ee;}
   #benchPanel .pickname{font-size:13px;color:#ffe2a6;margin:4px 2px 0;min-height:16px;}
+  #benchPanel .elchip{display:inline-flex;align-items:center;gap:5px;padding:6px 7px 6px 9px;}
+  #benchPanel .elchip .elsym{cursor:pointer;}
+  #benchPanel .elchip .elx{color:#7f8db0;cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
+  #benchPanel .elchip .elx:hover{color:#e0696b;}
+  #benchPanel .eladd{cursor:pointer;color:#6f9fd0;border-style:dashed;}
+  #benchPanel .eladd:hover{color:#9fc4ee;border-color:rgba(236,183,78,0.6);}
   #benchPanel .amtlbl{font-size:11px;color:#7f8db0;letter-spacing:.05em;text-transform:uppercase;}
   #benchPanel .amtbtn{width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:16px;color:#cdd9ef;background:rgba(74,144,212,0.12);border:1px solid rgba(160,180,210,0.18);line-height:1;}
   #benchPanel .amtbtn:hover{border-color:rgba(236,183,78,0.6);}
@@ -66,7 +72,12 @@
   #benchPanel .mixitem .q{color:#ffe2a6;font-weight:600;}
   #benchPanel .mixitem .x{margin-left:auto;color:#9fb3d6;cursor:pointer;font-size:16px;line-height:1;}
   #benchPanel .mixitem .x:hover{color:#e0696b;}
-  #benchPanel .toolsrow{display:flex;flex-wrap:wrap;gap:5px;}
+  #benchPanel .roombase{font-size:11px;color:#7f8db0;margin:2px 2px 6px;line-height:1.4;font-style:italic;}
+  #benchPanel .toolsrow{display:flex;flex-direction:column;gap:5px;}
+  #benchPanel .dial{display:flex;align-items:center;gap:6px;}
+  #benchPanel .dlbl{font-size:12px;color:#9fb3d6;min-width:62px;letter-spacing:.03em;}
+  #benchPanel .dval{min-width:54px;text-align:center;font-size:13px;color:#ffe2a6;}
+  #benchPanel .trigrow{display:flex;gap:5px;margin-top:2px;}
   #benchPanel .tool{font-size:12px;padding:5px 9px;border-radius:8px;cursor:pointer;color:#9fb3d6;background:rgba(74,144,212,0.08);border:1px solid rgba(160,180,210,0.14);transition:all .14s;}
   #benchPanel .tool:hover{border-color:rgba(236,183,78,0.5);}
   #benchPanel .tool.on{border-color:rgba(236,183,78,0.9);background:rgba(212,160,73,0.18);color:#ffe2a6;}
@@ -172,7 +183,16 @@
     <div class="lbl" style="margin-top:10px;">Your mix</div>
     <div id="benchMix" class="mixlist"><div class="mixempty">pick an agent, set a quantity, add it</div></div>
     <div class="lbl" style="margin-top:10px;">Conditions</div>
-    <div id="benchTools" class="toolsrow"></div>
+    <div class="roombase">Lab baseline: room temperature, 20&deg;C &middot; 1 atm. Many reactions go right here.</div>
+    <div id="benchTools" class="toolsrow">
+      <div class="dial" id="dialHeat"><span class="dlbl">Heat</span><button class="amtbtn" data-dial="heat" data-d="-1">&#8722;</button><span class="dval" id="heatVal">20&deg;C</span><button class="amtbtn" data-dial="heat" data-d="1">+</button></div>
+      <div class="dial" id="dialPress"><span class="dlbl">Pressure</span><button class="amtbtn" data-dial="press" data-d="-1">&#8722;</button><span class="dval" id="pressVal">1 atm</span><button class="amtbtn" data-dial="press" data-d="1">+</button></div>
+      <div class="trigrow">
+        <div class="tool" data-k="spark">Spark</div>
+        <div class="tool" data-k="catalyst">Catalyst</div>
+        <div class="tool" data-k="water">Water</div>
+      </div>
+    </div>
     <button id="benchReact">React</button>
     <button id="benchClear">Clear</button>
     <button id="bookBtn">&#128210; Lab journal</button>
@@ -545,7 +565,7 @@
     addEventListener('pointerup',()=>dragging=false);
     dom.addEventListener('wheel',e=>{ if(renderer.xr.isPresenting) return; if(orbitOn){ orbDist=Math.max(0.9,Math.min(8.0, orbDist + e.deltaY*0.01)); applyDesktopCam(); return; } for(const b of pool){ if(b.grabbedBy==='desktop'){ b.grabDist=Math.max(0.5,Math.min(30.0, b.grabDist + e.deltaY*0.004)); } } },{passive:true});
     addEventListener('pointermove',e=>{ mouseNDC.x=(e.clientX/innerWidth)*2-1; mouseNDC.y=-(e.clientY/innerHeight)*2+1; if(!dragging||renderer.xr.isPresenting) return; dragMoved=true; if(orbitOn){ orbYaw-=(e.clientX-pxv)*0.006; orbPitch+=(e.clientY-pyv)*0.006; orbPitch=Math.max(-0.45,Math.min(1.25,orbPitch)); } else { dYaw-=(e.clientX-pxv)*0.005; dPitch-=(e.clientY-pyv)*0.005; dPitch=Math.max(-1.3,Math.min(0.6,dPitch)); } pxv=e.clientX; pyv=e.clientY; applyDesktopCam(); });
-    dom.addEventListener('click',e=>{ if(renderer.xr.isPresenting||dragMoved) return; if(mode==='table'&&hoverZ){ const o=ELEM.find(x=>x[0]===hoverZ); if(o) showElement(o); } else if(mode==='mol'&&molHover>=0){ buildMolecule(molHover); } });
+    dom.addEventListener('click',e=>{ if(renderer.xr.isPresenting||dragMoved) return; if(mode==='table'&&hoverZ){ const o=ELEM.find(x=>x[0]===hoverZ); if(o){ if(window.tableEditMode&&window.__toggleShelf){ window.__toggleShelf(o[1]); } else showElement(o); } } else if(mode==='mol'&&molHover>=0){ buildMolecule(molHover); } });
     addEventListener('keydown',e=>{ keys[e.code]=true;
       if(e.code==='Space'){ e.preventDefault(); if(!renderer.xr.isPresenting && !desktopActive && mode==='sandbox'){ poseOf('desktop',_o,_d); intersectSea(_o,_d,_spot); desktopActive=spawnBody('desktop',_spot); desktopLast=desktopActive; } }
       if(e.code==='KeyC'){ let tg=desktopActive||((desktopLast&&!desktopLast.free&&!desktopLast.held)?desktopLast:null); if(tg&&!tg.held){ commitBody(tg); desktopActive=null; } }
@@ -702,11 +722,14 @@
     const cells=ELEM.map(function(o){ const p=cellPos(o); return {o:o,x:p[0],y:p[1]}; });
     function cellAtUV(u,v){ const px=u*TBLW, py=(1-v)*TBLH; for(const c of cells){ if(px>=c.x&&px<=c.x+cw&&py>=c.y&&py<=c.y+chh) return c.o; } return null; }
     function drawTable(){ tctx.clearRect(0,0,TBLW,TBLH);
-      tctx.textAlign='left'; tctx.fillStyle='#e7eefc'; tctx.font='400 42px Georgia, serif'; tctx.fillText('The Elements',x0,54);
-      tctx.fillStyle='#7e93b5'; tctx.font='300 24px system-ui, sans-serif'; tctx.fillText('coloured by  M = \u03C7s \u2212 \u03BB    blue: loosely bound    gold: iron-peak stable', x0+300, 50);
-      for(const c of cells){ const o=c.o, sel=o[0]===selZ, hov=o[0]===hoverZ;
-        tctx.globalAlpha=sel?0.92:(hov?0.62:0.34); tctx.fillStyle=mcol(o[10]); rrect(tctx,c.x,c.y,cw,chh,8); tctx.fill(); tctx.globalAlpha=1;
-        tctx.strokeStyle=sel?'#ecb74e':(hov?'rgba(236,183,78,0.8)':'rgba(160,180,210,0.22)'); tctx.lineWidth=sel?3.5:1.4; rrect(tctx,c.x,c.y,cw,chh,8); tctx.stroke();
+      var editing = (typeof window!=='undefined' && window.tableEditMode);
+      tctx.textAlign='left'; tctx.fillStyle='#e7eefc'; tctx.font='400 42px Georgia, serif'; tctx.fillText(editing?'Build your shelf':'The Elements',x0,54);
+      tctx.fillStyle=editing?'#ecb74e':'#7e93b5'; tctx.font='300 24px system-ui, sans-serif';
+      tctx.fillText(editing?'tap the elements you want on your bench (lit = on your shelf) \u2014 only measured ones can be added':'coloured by  M = \u03C7s \u2212 \u03BB    blue: loosely bound    gold: iron-peak stable', x0+300, 50);
+      var shelf=(typeof window!=='undefined'&&window.__shelfSet)?window.__shelfSet():{};
+      for(const c of cells){ const o=c.o, sel=o[0]===selZ, hov=o[0]===hoverZ; var onShelf=editing&&shelf[o[1]];
+        tctx.globalAlpha=onShelf?0.95:(sel?0.92:(hov?0.62:0.34)); tctx.fillStyle=mcol(o[10]); rrect(tctx,c.x,c.y,cw,chh,8); tctx.fill(); tctx.globalAlpha=1;
+        tctx.strokeStyle=onShelf?'#7fb27f':(sel?'#ecb74e':(hov?'rgba(236,183,78,0.8)':'rgba(160,180,210,0.22)')); tctx.lineWidth=(onShelf||sel)?3.5:1.4; rrect(tctx,c.x,c.y,cw,chh,8); tctx.stroke();
         tctx.fillStyle='#0a0e16'; tctx.textAlign='left'; tctx.font='600 18px system-ui, sans-serif'; tctx.fillText(o[0],c.x+8,c.y+24);
         tctx.textAlign='center'; tctx.font='700 40px system-ui, sans-serif'; tctx.fillText(o[1],c.x+cw/2,c.y+62);
         tctx.fillStyle='rgba(10,14,22,0.82)'; tctx.font='600 15px system-ui, sans-serif'; tctx.fillText(o[9].toFixed(1),c.x+cw/2,c.y+chh-9); }
@@ -904,9 +927,14 @@
       Cl:{sym:'Cl',name:'Chlorine', pos:1, en:3.16, cls:'nonmetal', spec:'Cl'},
       F: {sym:'F', name:'Fluorine', pos:1, en:3.98, cls:'nonmetal', spec:'F'},
       Au:{sym:'Au',name:'Gold',     pos:1, en:2.54, cls:'noble_metal', spec:'Au'},
-      Ne:{sym:'Ne',name:'Neon',     pos:0, en:0.0,  cls:'noble_gas', spec:'Ne'}
+      Ne:{sym:'Ne',name:'Neon',     pos:0, en:0.0,  cls:'noble_gas', spec:'Ne'},
+      S: {sym:'S', name:'Sulfur',    pos:2, en:2.58, cls:'nonmetal', spec:'S'},
+      P: {sym:'P', name:'Phosphorus',pos:3, en:2.19, cls:'nonmetal', spec:'P'},
+      Fe:{sym:'Fe',name:'Iron',      pos:2, en:1.83, cls:'metal', spec:'Fe'},
+      Ca:{sym:'Ca',name:'Calcium',   pos:2, en:1.00, cls:'metal', spec:'Ca'},
+      Mg:{sym:'Mg',name:'Magnesium', pos:2, en:1.31, cls:'metal', spec:'Mg'}
     };
-    const REAG_ORDER=['H','O','C','N','Na','Cl','F','Au','Ne'];
+    const REAG_ORDER=['H','O','C','N','Na','Cl','F','Au','Ne','S','P','Fe','Ca','Mg'];
 
     // curated products (already-measured molecules carry their substrate M)
     const PROD = {
@@ -1084,7 +1112,23 @@
     // working-screen state: a mix the user builds up, plus condition toggles
     let benchMix=[];           // [{key:'H', qty:2}, ...] in the order added
     let benchPick='H', benchQty=1;
-    let benchCond={heat:false,spark:false,pressure:false,catalyst:false,water:false};
+    let benchCond={spark:false,catalyst:false,water:false};   // momentary/presence triggers
+    let benchHeat=20;        // degrees C  (room temp default)
+    let benchPress=1;        // atm
+    const HEAT_STEPS=[20,100,200,300,450,600,900,1200];   // °C dial stops
+    const PRESS_STEPS=[1,2,5,10,50,100,250];               // atm dial stops
+    function stepDial(arr,cur,d){ var i=arr.indexOf(cur); if(i<0) i=0; i=Math.max(0,Math.min(arr.length-1,i+d)); return arr[i]; }
+    // parse a recipe's condition string into honest requirement thresholds (known-chemistry).
+    // explicit °C is read directly; qualitative words map to approximate bands, labelled approximate.
+    function condNeeds(cond){ if(!cond) return {}; var n=cond.toLowerCase(); var req={};
+      var mC=n.match(/(\d+)\s*c/); if(mC) req.heat=parseInt(mC[1],10);
+      else if(/very high temp/.test(n)) req.heat=1000; else if(/strong heat/.test(n)) req.heat=800;
+      else if(/heat|ignit|flame|light/.test(n)) req.heat=150;
+      if(/high p|pressure|compress/.test(n)) req.press=50;
+      if(/spark|ignit|flame/.test(n)) req.spark=true;
+      if(/catalyst/.test(n)) req.catalyst=true;
+      if(/aqueous|water/.test(n)) req.water=true;
+      return req; }
     function chemReagents(){ const at={}; benchMix.forEach(function(it){ at[it.key]=(at[it.key]||0)+it.qty; });
       const out={}; for(const a in at){ const key=DIATOMIC[a]||a; out[key]=(out[key]||0)+at[a]; } return out; }
     // back-compat: animation + spectra still read benchA/benchB
@@ -1118,13 +1162,13 @@
     // lab journal — every reaction you run, saved as a re-loadable working entry.
     // picking one loads its mix + conditions back onto the bench to keep experimenting.
     let formulaBook=[];
-    function mixSig(){ return benchMix.map(function(it){return it.qty+it.key;}).join('+')+'|'+Object.keys(benchCond).filter(function(k){return benchCond[k];}).sort().join(','); }
+    function mixSig(){ return benchMix.map(function(it){return it.qty+it.key;}).join('+')+'|h'+benchHeat+'p'+benchPress+'|'+Object.keys(benchCond).filter(function(k){return benchCond[k];}).sort().join(','); }
     function bookAdd(){ try{ if(!window.CHEM || !benchMix.length) return; const reag=chemReagents();
         const ms=chemRun(reag).filter(function(m){return m.times>0;});
         const sig=mixSig(); if(formulaBook.some(function(e){return e.sig===sig;})) return;
         const mixCopy=benchMix.map(function(it){return {key:it.key,qty:it.qty};});
         const condCopy={}; for(const k in benchCond) condCopy[k]=benchCond[k];
-        let entry={sig:sig, mix:mixCopy, cond:condCopy, clean:false, name:'Mix', eqn:'', prods:[], hazard:'', cstr:''};
+        let entry={sig:sig, mix:mixCopy, cond:condCopy, heat:benchHeat, press:benchPress, clean:false, name:'Mix', eqn:'', prods:[], hazard:'', cstr:''};
         if(ms.length){ const m=ms[0], rx=m.rx; const rec=(CHEM.REC&&CHEM.REC[rx.name])||null;
           entry.name=rx.name; entry.eqn=chemEqn(rx); entry.cstr=rx.cond||''; entry.hazard=rec?rec.hazards:'';
           entry.prods=Object.keys(rx.p).map(function(s){ const mol=CHEM.MOL[s]; return {f:s,n:mol?mol.n:s,M:(mol&&mol.M!=null)?mol.M:null}; });
@@ -1137,6 +1181,7 @@
     function loadEntry(idx){ const e=formulaBook[idx]; if(!e) return;
       benchMix=e.mix.map(function(it){return {key:it.key,qty:it.qty};});
       for(const k in benchCond) benchCond[k]= !!(e.cond&&e.cond[k]);
+      benchHeat=(e.heat!=null?e.heat:20); benchPress=(e.press!=null?e.press:1);
       benchResult=null; syncBenchAB(); renderMix&&renderMix(); refreshTools&&refreshTools(); drawBenchInfo();
       const bp=document.getElementById('bookPanel'); if(bp) bp.classList.remove('show'); }
     function renderBook(){ const box=document.getElementById('bookList'); if(!box) return; box.innerHTML='';
@@ -1214,13 +1259,17 @@
             x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('products: '+pline+'   [measured]',44,y); y+=36;
             var lk=Object.keys(m.leftover||{}); if(lk.length){ x.fillStyle='#c89b6a'; x.font='300 24px system-ui, sans-serif';
               x.fillText('left over: '+lk.map(function(s){return m.leftover[s]+' '+s;}).join(', ')+'   \u2014 ratio wasn\u2019t exact',44,y); y+=36; }
-            if(rx.cond){ x.fillStyle='#7f8db0'; x.font='300 23px system-ui, sans-serif'; x.fillText('conditions: '+rx.cond+'   [known chemistry]',44,y); y+=34;
-              var need=rx.cond.toLowerCase(); var wants=[];
-              if(/spark|ignit|light|flame/.test(need)) wants.push('spark'); if(/heat|\u00b0c|roast/.test(need)) wants.push('heat');
-              if(/pressure|compress/.test(need)) wants.push('pressure'); if(/catalyst/.test(need)) wants.push('catalyst'); if(/aqueous|water/.test(need)) wants.push('water');
-              var miss=wants.filter(function(w){return !benchCond[w];});
-              if(wants.length){ if(miss.length){ x.fillStyle='#c89b6a'; x.font='300 22px system-ui, sans-serif'; x.fillText('your bench: still needs '+miss.join(', ')+'  \u2014 set the knobs to make it go',44,y); }
-                else { x.fillStyle='#7fb27f'; x.font='300 22px system-ui, sans-serif'; x.fillText('your bench: conditions met \u2713',44,y); } y+=34; } }
+            if(rx.cond){ x.fillStyle='#7f8db0'; x.font='300 23px px system-ui, sans-serif'.replace('px ',''); x.font='300 23px system-ui, sans-serif'; x.fillText('conditions: '+rx.cond+'   [known chemistry]',44,y); y+=34;
+              var req=condNeeds(rx.cond); var miss=[];
+              if(req.heat && benchHeat<req.heat) miss.push('heat \u2265'+req.heat+'\u00b0C (you: '+benchHeat+'\u00b0C)');
+              if(req.press && benchPress<req.press) miss.push('pressure \u2265'+req.press+' atm (you: '+benchPress+' atm)');
+              if(req.spark && !benchCond.spark) miss.push('a spark');
+              if(req.catalyst && !benchCond.catalyst) miss.push('a catalyst');
+              if(req.water && !benchCond.water) miss.push('water');
+              var anyReq = req.heat||req.press||req.spark||req.catalyst||req.water;
+              if(anyReq){ if(miss.length){ x.fillStyle='#c89b6a'; x.font='300 22px system-ui, sans-serif'; x.fillText('your bench: needs '+miss.join(', '),44,y); }
+                else { x.fillStyle='#7fb27f'; x.font='300 22px system-ui, sans-serif'; x.fillText('your bench: conditions met \u2713 \u2014 it goes',44,y); } y+=34; }
+              else { x.fillStyle='#7fb27f'; x.font='300 22px system-ui, sans-serif'; x.fillText('goes at room temperature \u2014 no heat or pressure needed \u2713',44,y); y+=34; } }
             if(rec&&rec.hazards){ x.fillStyle='#e0696b'; x.font='600 22px system-ui, sans-serif'; var hw=('\u26a0 '+rec.hazards).split(' '); var hl='',hy=y; var hmw=BIW-100;
               for(var i=0;i<hw.length;i++){ var tt=hl?hl+' '+hw[i]:hw[i]; if(x.measureText(tt).width>hmw){ x.fillText(hl,44,hy); hl=hw[i]; hy+=28; } else hl=tt; } x.fillText(hl,44,hy); y=hy+38; } }
           else { const tried=chemRun(reag).filter(function(mm){return mm.times===0;});
@@ -1306,8 +1355,21 @@
     // keep benchA/benchB pointed at the first two distinct agents so animation + spectra still work
     function syncBenchAB(){ if(benchMix[0]) benchA=benchMix[0].key; if(benchMix[1]) benchB=benchMix[1].key; else if(benchMix[0]) benchB=benchMix[0].key; placeReagents&&placeReagents(); }
     function refreshLensButtons(){ document.querySelectorAll('#benchPanel .lensbtn').forEach((c,i)=> c.classList.toggle('on', i===benchLens)); }
-    function refreshTools(){ document.querySelectorAll('#benchPanel .tool').forEach(function(t){ const k=t.getAttribute('data-k'); t.classList.toggle('on', !!benchCond[k]); }); }
+    function refreshTools(){ document.querySelectorAll('#benchPanel .tool').forEach(function(t){ const k=t.getAttribute('data-k'); t.classList.toggle('on', !!benchCond[k]); });
+      var hv=document.getElementById('heatVal'); if(hv) hv.textContent=benchHeat+'\u00b0C';
+      var pv=document.getElementById('pressVal'); if(pv) pv.textContent=benchPress+' atm'; }
     let benchShelf='Elements';
+    // user-curated element shelf — starts as everything measured, they trim/add via the table
+    let shelfElements=REAG_ORDER.slice();
+    let tableEditMode=false;
+    if(typeof window!=='undefined'){
+      Object.defineProperty(window,'tableEditMode',{get:function(){return tableEditMode;},set:function(v){tableEditMode=v;}});
+      window.__toggleShelf=function(sym){ if(!REAG[sym]) return false;   // only dispensable (measured) elements
+        if(shelfElements.indexOf(sym)>=0) shelfElements=shelfElements.filter(function(k){return k!==sym;});
+        else shelfElements.push(sym);
+        if(window.__drawTableEdit) window.__drawTableEdit(); return true; };
+      window.__shelfSet=function(){ var s={}; shelfElements.forEach(function(k){ if(REAG[k]) s[REAG[k].sym]=true; }); return s; };
+    }
     const SHELVES=['Elements','Gases','Acids','Salts','Made'];
     const SHELF_TYPE={Gases:'gas',Acids:'acid',Salts:'salt'};
     function renderProductChips(){ rebuildPicker(); }
@@ -1320,14 +1382,23 @@
       const pk=document.getElementById('benchPicker'); if(!pk) return; pk.innerHTML='';
       function chip(key,sym,name,cls){ const el=document.createElement('div'); el.className='chip'+(cls?' '+cls:''); el.setAttribute('data-key',key);
         el.textContent=sym; el.title=name; el.addEventListener('click',function(){ benchPick=key; refreshPicker(); }); pk.appendChild(el); }
-      if(benchShelf==='Elements'){ REAG_ORDER.forEach(function(key){ chip(key,REAG[key].sym,REAG[key].name); }); }
+      if(benchShelf==='Elements'){
+        shelfElements.forEach(function(key){ if(!REAG[key]) return; const el=document.createElement('div'); el.className='chip elchip'; el.setAttribute('data-key',key);
+          el.innerHTML='<span class="elsym">'+REAG[key].sym+'</span><span class="elx" title="remove from shelf">\u00d7</span>';
+          el.querySelector('.elsym').addEventListener('click',function(){ benchPick=key; refreshPicker(); });
+          el.querySelector('.elx').addEventListener('click',function(ev){ ev.stopPropagation(); shelfElements=shelfElements.filter(function(k){return k!==key;}); if(benchPick===key&&shelfElements[0]) benchPick=shelfElements[0]; rebuildPicker();
+            window.__benchReturn=true; tableEditMode=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
+          pk.appendChild(el); });
+        const add=document.createElement('div'); add.className='chip eladd'; add.textContent='+ add from table'; add.title='go to the periodic table and tap elements to add them';
+        add.addEventListener('click',function(){ window.__benchReturn=true; tableEditMode=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
+        pk.appendChild(add);
+      }
       else if(benchShelf==='Made'){ if(!madeProducts.length){ pk.innerHTML='<div class="pickempty">nothing made yet \u2014 react something first</div>'; }
         else madeProducts.forEach(function(spec){ const pr=PRODUCT_REAG[spec]; if(pr) chip(spec,pr.sym,pr.name+' (made earlier)','prod'); }); }
       else { const want=SHELF_TYPE[benchShelf]; const list=madeProducts.filter(function(spec){ return (window.CHEM_TYPE&&CHEM_TYPE[spec])===want; });
         if(!list.length){ pk.innerHTML='<div class="pickempty">no '+benchShelf.toLowerCase()+' made yet \u2014 they\u2019ll collect here</div>'; }
         else list.forEach(function(spec){ const pr=PRODUCT_REAG[spec]; if(pr) chip(spec,pr.sym,pr.name,'prod'); }); }
       refreshPicker(); }
-    const TOOL_DEFS=[['heat','Heat'],['spark','Spark'],['pressure','Pressure'],['catalyst','Catalyst'],['water','Water']];
     let benchPanelBuilt=false;
     function buildBenchPanel(){ if(benchPanelBuilt) return; benchPanelBuilt=true;
       rebuildPicker();
@@ -1337,10 +1408,13 @@
       const add=document.getElementById('benchAdd'); if(add) add.addEventListener('click',function(){
         const ex=benchMix.find(function(m){return m.key===benchPick;}); if(ex) ex.qty=Math.min(9,ex.qty+benchQty); else benchMix.push({key:benchPick,qty:benchQty});
         benchQty=1; if(qv) qv.textContent=1; syncBenchAB(); renderMix(); drawBenchInfo(); });
-      const tr=document.getElementById('benchTools'); if(tr){ TOOL_DEFS.forEach(function(td){ const el=document.createElement('div'); el.className='tool'; el.setAttribute('data-k',td[0]); el.textContent=td[1];
-        el.addEventListener('click',function(){ benchCond[td[0]]=!benchCond[td[0]]; refreshTools(); drawBenchInfo(); }); tr.appendChild(el); }); }
+      const tr=document.getElementById('benchTools'); if(tr){
+        tr.querySelectorAll('.tool').forEach(function(el){ el.addEventListener('click',function(){ const k=el.getAttribute('data-k'); benchCond[k]=!benchCond[k]; refreshTools(); drawBenchInfo(); }); });
+        tr.querySelectorAll('.amtbtn[data-dial]').forEach(function(b){ b.addEventListener('click',function(){ const which=b.getAttribute('data-dial'); const d=parseInt(b.getAttribute('data-d'),10);
+          if(which==='heat') benchHeat=stepDial(HEAT_STEPS,benchHeat,d); else benchPress=stepDial(PRESS_STEPS,benchPress,d);
+          refreshTools(); drawBenchInfo(); }); }); }
       const rb=document.getElementById('benchReact'); if(rb) rb.addEventListener('click',function(){ runReaction(); });
-      const cl=document.getElementById('benchClear'); if(cl) cl.addEventListener('click',function(){ benchMix=[]; for(const k in benchCond) benchCond[k]=false; benchResult=null; renderMix(); refreshTools(); drawBenchInfo(); });
+      const cl=document.getElementById('benchClear'); if(cl) cl.addEventListener('click',function(){ benchMix=[]; for(const k in benchCond) benchCond[k]=false; benchHeat=20; benchPress=1; benchResult=null; renderMix(); refreshTools(); drawBenchInfo(); });
       const bb=document.getElementById('bookBtn'); if(bb) bb.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(!p) return; renderBook(); p.classList.toggle('show'); });
       const bc=document.getElementById('bookClose'); if(bc) bc.addEventListener('click',function(){ const p=document.getElementById('bookPanel'); if(p) p.classList.remove('show'); });
       const st=document.getElementById('seeTable'); if(st) st.addEventListener('click',function(){ window.__benchReturn=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
@@ -1514,14 +1588,14 @@
         if(!renderer.xr.isPresenting){ orbitOn=true; orbYaw=0.0; orbPitch=0.16; orbDist=cell?4.0:(bench?3.4:(mol?3.5:2.7)); orbFocus.copy(cell?new THREE.Vector3(0,1.6,-3.0):(bench?new THREE.Vector3(0,1.55,-2.5):(mol?new THREE.Vector3(0,1.72,-2.45):new THREE.Vector3(0,1.3,-1.95)))); applyDesktopCam(); } }
       else { if(showcase){ showcase.showcase=false; showcase.dissolving=true; showcase=null; } orbitOn=false; applyDesktopCam(); }
       const oh=document.getElementById('orbHint'); if(oh) oh.classList.toggle('show', (tbl||mol||bench||cell) && !renderer.xr.isPresenting);
-      const bkb=document.getElementById('backBtn'); if(bkb){ const showBack = tbl && window.__benchReturn && !renderer.xr.isPresenting; bkb.classList.toggle('show', !!showBack); if(!tbl) window.__benchReturn=false; }
+      const bkb=document.getElementById('backBtn'); if(bkb){ const showBack = tbl && window.__benchReturn && !renderer.xr.isPresenting; bkb.textContent = window.tableEditMode? '\u2713 done \u2014 back to bench' : '\u2190 back to bench'; bkb.classList.toggle('show', !!showBack); if(!tbl) window.__benchReturn=false; }
       if(bench||cell){ ctrlHover=null; drawCtrl(); }
       if(tbl){ drawTable(); }   // ensure the table texture is drawn immediately (never blank, no first-hover stall)
       var _dt=performance.now()-_t0;
       if(_dt>80){ var pr=document.getElementById('orbHint'); if(pr){ pr.textContent='entered '+m+' in '+_dt.toFixed(0)+' ms'; pr.classList.add('show'); setTimeout(function(){ pr.textContent='Drag to orbit \u00b7 scroll to zoom \u00b7 click to build'; },2500); } }
     }
-    if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; }
-    (function(){ const bkb=document.getElementById('backBtn'); if(bkb) bkb.addEventListener('click',function(){ window.__benchReturn=false; setMode('bench'); }); })();
+    if(typeof window!=='undefined'){ window.__eoeSetMode=setMode; window.__drawTableEdit=drawTable; }
+    (function(){ const bkb=document.getElementById('backBtn'); if(bkb) bkb.addEventListener('click',function(){ window.__benchReturn=false; if(window.tableEditMode){ window.tableEditMode=false; if(typeof rebuildPicker==='function') rebuildPicker(); } setMode('bench'); }); })();
 
     function interactBodies(dt){
       const H=[]; for(const b of pool) if(!b.free && b.held && !b.showcase) H.push(b);
