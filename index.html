@@ -220,6 +220,7 @@
     <div class="lbl" style="margin-top:12px;">Lens of vision</div>
     <div class="lensrow" id="benchLenses"></div>
   </div>
+  <div id="benchDom"><div class="hd">Your bench</div><div id="benchDomBody"></div></div>
   <div id="bookPanel">
     <div class="hd">Lab Journal <span id="bookClose" title="close">&times;</span></div>
     <div style="font-size:12px;color:#9fb3d6;margin:0 2px 8px;">Every reaction you&rsquo;ve run. Tap one to load it back onto the bench and keep tuning.</div>
@@ -1178,7 +1179,7 @@
     const BIW=900,BIH=1180; const bicv=document.createElement('canvas'); bicv.width=BIW; bicv.height=BIH; const bictx=bicv.getContext('2d');
     const bitex=new THREE.CanvasTexture(bicv);
     const benchInfo=new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95*BIH/BIW), new THREE.MeshBasicMaterial({map:bitex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
-    benchInfo.renderOrder=16; benchInfo.position.set(1.9,1.5,-2.2); benchInfo.rotation.y=-0.4; benchInfo.visible=false; benchGroup.add(benchInfo);
+    benchInfo.renderOrder=16; benchInfo.position.set(1.9,1.5,-2.2); benchInfo.rotation.y=-0.4; benchInfo.visible=false; benchGroup.add(benchInfo); if(typeof window!=='undefined') window.__eoeBenchCanvas=bicv;
 
     // floating equation — large, flat, billboarded above the spheres (the headline)
     const EQW=1200,EQH=300; const eqcv=document.createElement('canvas'); eqcv.width=EQW; eqcv.height=EQH; const eqctx=eqcv.getContext('2d');
@@ -1958,13 +1959,14 @@
     function setMode(m){ const _t0=performance.now(); mode=m;
       const tbl=(m==='table'), mol=(m==='mol'), bench=(m==='bench'), cell=(m==='cell');
       tableGroup.visible=tbl; infoPlane.visible=false; molGroup.visible=mol; if(mol) drawMolShelf();
-      benchGroup.visible=bench; benchInfo.visible=bench; if(bench){ benchScrollY=0; ctrlView='bench'; }
+      benchGroup.visible=bench; benchInfo.visible = bench && renderer.xr.isPresenting; if(bench){ benchScrollY=0; ctrlView='bench'; }
       if(!bench){ eqPlane.visible=false; const hs=document.getElementById('hintStrip'); if(hs) hs.classList.remove('show'); }
       cellGroup.visible=cell; cellInfo.visible=cell;
       const cpan=document.getElementById('cellPanel'); if(cpan) cpan.classList.toggle('show', cell && !renderer.xr.isPresenting);
       if(cell){ cellReset(); }
       const mp=document.getElementById('molPicker'); if(mp) mp.classList.toggle('show', mol && !renderer.xr.isPresenting); molShelf.visible = mol && renderer.xr.isPresenting;
       const bp=document.getElementById('benchPanel'); if(bp) bp.classList.toggle('show', bench && !renderer.xr.isPresenting);
+      const bdom=document.getElementById('benchDom'); if(bdom) bdom.classList.toggle('show', bench && !renderer.xr.isPresenting);
       if(bench){ placeReagents(); drawBenchInfo(); refreshBenchChips(); refreshLensButtons(); drawCtrl(); } else { closA.vis=closB.vis=closP.vis=false; closA.pts.visible=closB.pts.visible=closP.pts.visible=false; }
       if(!tbl){ selZ=0; hoverZ=0; }
       if(!mol){ molSel=-1; molHover=-1; curMol=null; molGrab=null; for(const a of matom){ a.active=false; a.pts.visible=false; } mbPts.visible=false; molInfo.visible=false; }
@@ -2069,6 +2071,7 @@
       if(renderer.xr.isPresenting && !menuVisible && mode==='bench'){ ctrlPanel.position.set(-1.9,1.5,-2.2); ctrlPanel.rotation.set(0,0.42,0); ctrlPanel.visible=true; }
       else if(renderer.xr.isPresenting && !menuVisible && mode==='cell'){ ctrlPanel.position.set(-1.95,1.6,-2.4); ctrlPanel.rotation.set(0,0.45,0); ctrlPanel.visible=true; }
       else ctrlPanel.visible=false;
+      benchInfo.visible = renderer.xr.isPresenting && !menuVisible && mode==='bench';
       if(renderer.xr.isPresenting && xrSession){
         const srcs=xrSession.inputSources;
         { let dg='ctrls:'+srcs.length; for(let k=0;k<srcs.length;k++){ const s=srcs[k], g=s&&s.gamepad, hd=(s&&s.handedness)?s.handedness[0].toUpperCase():'?'; dg+=' ['+hd+(g&&g.buttons[0]&&g.buttons[0].pressed?' t1':' t0')+(g&&g.buttons[1]&&g.buttons[1].pressed?' g1':' g0')+']'; } vrDiag=dg; }
@@ -2234,7 +2237,7 @@
      remember layout, and a Reset that returns to the default home base. DOM-only (desktop);
      the 3D panels get their own arrange pass next. */
   (function(){
-    var PANELS=['molPicker','benchPanel','bookPanel','cellPanel'];
+    var PANELS=['molPicker','benchPanel','benchDom','bookPanel','cellPanel'];
     var GRID=8, SNAP=11, MINW=150, MINH=120, KEY='eoe_panel_layout_v1';
     var defaults={}, active=null;
 
@@ -2248,7 +2251,11 @@
       '#eoeReset{position:fixed;bottom:8px;right:10px;z-index:9999;font:600 11px ui-monospace,Menlo,monospace;'+
         'color:#9fb3d6;background:rgba(7,9,15,0.82);border:1px solid rgba(212,160,73,0.3);border-radius:8px;'+
         'padding:5px 9px;cursor:pointer;letter-spacing:0.4px;user-select:none;}'+
-      '#eoeReset:hover{color:#ffe2a6;border-color:rgba(236,183,78,0.7);}';
+      '#eoeReset:hover{color:#ffe2a6;border-color:rgba(236,183,78,0.7);}'+
+      '#benchDom{position:fixed;top:60px;right:14px;z-index:19;background:rgba(7,9,15,0.92);border:1px solid rgba(212,160,73,0.3);border-radius:14px;padding:10px 11px 13px;width:368px;display:none;}'+
+      '#benchDom.show{display:block;}'+
+      '#benchDom > .hd{font-family:ui-serif,Georgia,serif;font-size:17px;color:#e7eefc;margin:2px 2px 8px;letter-spacing:.03em;}'+
+      '#benchDomBody canvas{width:100%;height:auto;display:block;border-radius:9px;}';
     document.head.appendChild(st);
 
     function px(v){return Math.round(v)+'px';}
@@ -2320,7 +2327,10 @@
         active.el.style.width=px(s.w); active.el.style.height=px(s.h); active.el.style.maxHeight='none'; active.el.style.overflowY='auto'; } });
     document.addEventListener('pointerup',function(){ if(!active)return; active.el.classList.remove('eoe-grab'); active=null; save(); });
 
-    function init(){ captureDefaults(); load();
+    function init(){
+      var bc=window.__eoeBenchCanvas, body=document.getElementById('benchDomBody');
+      if(bc && body && bc.parentNode!==body){ body.appendChild(bc); }
+      captureDefaults(); load();
       var rb=document.createElement('div'); rb.id='eoeReset'; rb.textContent='\u21BA reset layout'; rb.title='Return panels to the default home base';
       rb.addEventListener('click',reset); document.body.appendChild(rb); }
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
