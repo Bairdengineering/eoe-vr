@@ -60,6 +60,9 @@
   #benchPanel .elchip .elx:hover{color:#e0696b;}
   #benchPanel .eladd{cursor:pointer;color:#6f9fd0;border-style:dashed;}
   #benchPanel .eladd:hover{color:#9fc4ee;border-color:rgba(236,183,78,0.6);}
+  #benchPanel .eloff{opacity:0.5;border-style:dashed;cursor:pointer;}
+  #benchPanel .eloff:hover{opacity:0.92;border-color:rgba(127,178,127,0.65);}
+  #benchPanel .eloff .eladdbk{color:#7fb27f;font-size:15px;line-height:1;padding:0 2px;font-weight:700;}
   #benchPanel .amtlbl{font-size:11px;color:#7f8db0;letter-spacing:.05em;text-transform:uppercase;}
   #benchPanel .amtbtn{width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:16px;color:#cdd9ef;background:rgba(74,144,212,0.12);border:1px solid rgba(160,180,210,0.18);line-height:1;}
   #benchPanel .amtbtn:hover{border-color:rgba(236,183,78,0.6);}
@@ -772,8 +775,8 @@
       for(const c of cells){ const o=c.o, sym=o[1], sel=o[0]===selZ, hov=o[0]===hoverZ;
         var onShelf=editing&&!!shelf[sym], measurable=!!REAG[sym];
         var padd=editing&&pendingAdd[sym], prem=editing&&pendingRemove[sym];
-        tctx.globalAlpha = padd?0.95:(onShelf?(prem?0.45:0.95):(editing?(measurable?0.5:0.16):(sel?0.92:(hov?0.62:0.34))));
-        tctx.fillStyle=mcol(o[10]); rrect(tctx,c.x,c.y,cw,chh,8); tctx.fill(); tctx.globalAlpha=1;
+        var a; if(editing){ a=!measurable?0.13:(padd?0.96:(prem?0.42:(onShelf?0.95:(hov?0.9:0.6)))); } else { a=sel?0.92:(hov?0.62:0.34); }
+        tctx.globalAlpha=a; tctx.fillStyle=mcol(o[10]); rrect(tctx,c.x,c.y,cw,chh,8); tctx.fill(); tctx.globalAlpha=1;
         var ring=padd?'#ecb74e':(prem?'#e06a6a':(onShelf?'#7fb27f':(sel?'#ecb74e':(hov?'rgba(236,183,78,0.8)':'rgba(160,180,210,0.22)'))));
         tctx.strokeStyle=ring; tctx.lineWidth=(padd||prem||onShelf||sel)?3.5:1.4; rrect(tctx,c.x,c.y,cw,chh,8); tctx.stroke();
         tctx.fillStyle='#0a0e16'; tctx.textAlign='left'; tctx.font='600 18px system-ui, sans-serif'; tctx.fillText(o[0],c.x+8,c.y+24);
@@ -794,8 +797,8 @@
         tctx.fillStyle='rgba(160,180,210,0.14)'; rrect(tctx,bx,fy,bw,fh,12); tctx.fill();
         tctx.strokeStyle='rgba(160,180,210,0.45)'; tctx.lineWidth=2.5; rrect(tctx,bx,fy,bw,fh,12); tctx.stroke();
         tctx.fillStyle='#cdd9ef'; tctx.font='600 30px system-ui, sans-serif'; tctx.fillText('\u2190  Back', bx+bw/2, fy+42);
-        tctx.fillStyle='rgba(159,179,214,0.85)'; tctx.font='300 24px system-ui, sans-serif';
-        tctx.fillText(inVRtbl?'Point at the elements you want and pull the trigger to mark them \u2014 green are already on your bench':'Click the elements you want to mark them \u2014 green are already on your bench', TBLW/2, fy-20);
+        tctx.fillStyle='rgba(159,179,214,0.85)'; tctx.font='300 23px system-ui, sans-serif';
+        tctx.fillText((inVRtbl?'Point at a bright cell and pull the trigger to mark it':'Click a bright cell to mark it')+'   \u00b7   green = on your bench   \u00b7   dim = no measured value yet', TBLW/2, fy-20);
       } else {
         tctx.textAlign='center'; tctx.fillStyle='rgba(159,179,214,0.9)'; tctx.font='300 27px system-ui, sans-serif';
         tctx.fillText(inVRtbl?'Point at an element and pull the trigger to open it  \u00b7  press the Menu button to go back':'Click an element to open it', TBLW/2, TBLH-26);
@@ -965,7 +968,7 @@
     // "Colour" is a LENS projecting that spectrum through a sensor. Human vision = the three
     // CIE 1931 cone responses integrated to sRGB (rigorous true colour). A lens is, by contract,
     // a SET OF SPECTRAL-SENSITIVITY CURVES -> biology later just swaps the curve set (bee, shrimp).
-    // Reactivity here is read at the VALENCE scale (open coupling positions + electronegativity pull),
+    // Reactivity here is read at the VALENCE scale (open coupling positions + sink),
     // deliberately NOT the nuclear binding M the periodic table shows. Nothing below is hand-painted.
 
     // ---- honest spectra (emission lines from real atomic spectra; reflectance/appearance curves for bulk) ----
@@ -1008,6 +1011,18 @@
       Mg: {sym:'Mg',name:'Magnesium', pos:2, en:1.43, cls:'metal', spec:'Mg'}
     };
     const REAG_ORDER=['H','O','C','N','Na','Cl','F','Au','Ne','S','P','Fe','Ca','Mg'];
+    Object.assign(REAG, {He:{sym:'He',name:'Helium',pos:0,en:11.697,cls:'noble_gas',spec:'He'}, Li:{sym:'Li',name:'Lithium',pos:1,en:2.75,cls:'metal',spec:'Li'}, Be:{sym:'Be',name:'Beryllium',pos:2,en:4.024,cls:'metal',spec:'Be'}, B:{sym:'B',name:'Boron',pos:3,en:3.507,cls:'metalloid',spec:'B'}, Al:{sym:'Al',name:'Aluminum',pos:3,en:2.504,cls:'metal',spec:'Al'}, Si:{sym:'Si',name:'Silicon',pos:4,en:3.615,cls:'metalloid',spec:'Si'}, Ar:{sym:'Ar',name:'Argon',pos:0,en:7.28,cls:'noble_gas',spec:'Ar'}, K:{sym:'K',name:'Potassium',pos:1,en:2.063,cls:'metal',spec:'K'}, Sc:{sym:'Sc',name:'Scandium',pos:3,en:1.756,cls:'metal',spec:'Sc'}, Ti:{sym:'Ti',name:'Titanium',pos:4,en:2.093,cls:'metal',spec:'Ti'}, V:{sym:'V',name:'Vanadium',pos:5,en:2.397,cls:'metal',spec:'V'}, Cr:{sym:'Cr',name:'Chromium',pos:6,en:0.86,cls:'metal',spec:'Cr'}, Mn:{sym:'Mn',name:'Manganese',pos:2,en:2.94,cls:'metal',spec:'Mn'}, Co:{sym:'Co',name:'Cobalt',pos:6,en:3.428,cls:'metal',spec:'Co'}, Ni:{sym:'Ni',name:'Nickel',pos:4,en:3.657,cls:'metal',spec:'Ni'}, Cu:{sym:'Cu',name:'Copper',pos:4,en:3.37,cls:'metal',spec:'Cu'}, Zn:{sym:'Zn',name:'Zinc',pos:4,en:4.02,cls:'metal',spec:'Zn'}, Ga:{sym:'Ga',name:'Gallium',pos:3,en:2.514,cls:'metal',spec:'Ga'}, Ge:{sym:'Ge',name:'Germanium',pos:4,en:3.544,cls:'metalloid',spec:'Ge'}, As:{sym:'As',name:'Arsenic',pos:3,en:4.653,cls:'metalloid',spec:'As'}, Se:{sym:'Se',name:'Selenium',pos:2,en:5.851,cls:'nonmetal',spec:'Se'}, Br:{sym:'Br',name:'Bromine',pos:1,en:7.14,cls:'nonmetal',spec:'Br'}, Kr:{sym:'Kr',name:'Krypton',pos:0,en:6.693,cls:'noble_gas',spec:'Kr'}, Rb:{sym:'Rb',name:'Rubidium',pos:1,en:1.988,cls:'metal',spec:'Rb'}, Sr:{sym:'Sr',name:'Strontium',pos:2,en:2.504,cls:'metal',spec:'Sr'}, Y:{sym:'Y',name:'Yttrium',pos:3,en:2.183,cls:'metal',spec:'Y'}, Zr:{sym:'Zr',name:'Zirconium',pos:4,en:2.666,cls:'metal',spec:'Zr'}, Nb:{sym:'Nb',name:'Niobium',pos:5,en:1.956,cls:'metal',spec:'Nb'}, Mo:{sym:'Mo',name:'Molybdenum',pos:6,en:2.25,cls:'metal',spec:'Mo'}, Tc:{sym:'Tc',name:'Technetium',pos:4,en:4.142,cls:'metal',spec:'Tc'}, Ru:{sym:'Ru',name:'Ruthenium',pos:6,en:2.887,cls:'metal',spec:'Ru'}, Rh:{sym:'Rh',name:'Rhodium',pos:6,en:3.225,cls:'metal',spec:'Rh'}, Pd:{sym:'Pd',name:'Palladium',pos:4,en:3.372,cls:'metal',spec:'Pd'}, Ag:{sym:'Ag',name:'Silver',pos:2,en:3.381,cls:'metal',spec:'Ag'}, Cd:{sym:'Cd',name:'Cadmium',pos:4,en:4.007,cls:'metal',spec:'Cd'}, In:{sym:'In',name:'Indium',pos:3,en:2.555,cls:'metal',spec:'In'}, Sn:{sym:'Sn',name:'Tin',pos:4,en:3.505,cls:'metal',spec:'Sn'}, Sb:{sym:'Sb',name:'Antimony',pos:3,en:4.511,cls:'metalloid',spec:'Sb'}, Te:{sym:'Te',name:'Tellurium',pos:2,en:5.581,cls:'metalloid',spec:'Te'}, I:{sym:'I',name:'Iodine',pos:1,en:6.715,cls:'nonmetal',spec:'I'}, Xe:{sym:'Xe',name:'Xenon',pos:0,en:6.144,cls:'noble_gas',spec:'Xe'}, Cs:{sym:'Cs',name:'Cesium',pos:1,en:1.881,cls:'metal',spec:'Cs'}, Ba:{sym:'Ba',name:'Barium',pos:2,en:2.373,cls:'metal',spec:'Ba'}, La:{sym:'La',name:'Lanthanum',pos:3,en:2.703,cls:'metal',spec:'La'}, Ce:{sym:'Ce',name:'Cerium',pos:4,en:2.332,cls:'metal',spec:'Ce',prov:'open-4f ΔSCF unreliable'}, Pr:{sym:'Pr',name:'Praseodymium',pos:3,en:-0.352,cls:'metal',spec:'Pr',prov:'open-4f ΔSCF unreliable'}, Nd:{sym:'Nd',name:'Neodymium',pos:3,en:-0.17,cls:'metal',spec:'Nd',prov:'open-4f ΔSCF unreliable'}, Pm:{sym:'Pm',name:'Promethium',pos:3,en:-0.03,cls:'metal',spec:'Pm',prov:'open-4f ΔSCF unreliable'}, Sm:{sym:'Sm',name:'Samarium',pos:3,en:0.075,cls:'metal',spec:'Sm',prov:'open-4f ΔSCF unreliable'}, Eu:{sym:'Eu',name:'Europium',pos:3,en:0.151,cls:'metal',spec:'Eu',prov:'solver did not converge to a usable value'}, Gd:{sym:'Gd',name:'Gadolinium',pos:3,en:4.294,cls:'metal',spec:'Gd'}, Tb:{sym:'Tb',name:'Terbium',pos:3,en:0.225,cls:'metal',spec:'Tb',prov:'open-4f ΔSCF unreliable'}, Dy:{sym:'Dy',name:'Dysprosium',pos:3,en:0.23,cls:'metal',spec:'Dy',prov:'open-4f ΔSCF unreliable'}, Ho:{sym:'Ho',name:'Holmium',pos:3,en:0.215,cls:'metal',spec:'Ho',prov:'open-4f ΔSCF unreliable'}, Er:{sym:'Er',name:'Erbium',pos:3,en:0.182,cls:'metal',spec:'Er',prov:'open-4f ΔSCF unreliable'}, Tm:{sym:'Tm',name:'Thulium',pos:3,en:0.133,cls:'metal',spec:'Tm',prov:'open-4f ΔSCF unreliable'}, Yb:{sym:'Yb',name:'Ytterbium',pos:3,en:2.995,cls:'metal',spec:'Yb'}, Lu:{sym:'Lu',name:'Lutetium',pos:3,en:2.869,cls:'metal',spec:'Lu'}, Hf:{sym:'Hf',name:'Hafnium',pos:4,en:3.274,cls:'metal',spec:'Hf'}, Ta:{sym:'Ta',name:'Tantalum',pos:5,en:3.822,cls:'metal',spec:'Ta'}, W:{sym:'W',name:'Tungsten',pos:6,en:4.371,cls:'metal',spec:'W'}, Re:{sym:'Re',name:'Rhenium',pos:4,en:4.925,cls:'metal',spec:'Re'}, Os:{sym:'Os',name:'Osmium',pos:6,en:5.486,cls:'metal',spec:'Os'}, Ir:{sym:'Ir',name:'Iridium',pos:6,en:6.057,cls:'metal',spec:'Ir'}, Pt:{sym:'Pt',name:'Platinum',pos:4,en:4.598,cls:'metal',spec:'Pt'}, Hg:{sym:'Hg',name:'Mercury',pos:2,en:4.89,cls:'metal',spec:'Hg'}, Tl:{sym:'Tl',name:'Thallium',pos:3,en:2.742,cls:'metal',spec:'Tl'}, Pb:{sym:'Pb',name:'Lead',pos:4,en:3.748,cls:'metal',spec:'Pb'}, Bi:{sym:'Bi',name:'Bismuth',pos:3,en:4.796,cls:'metal',spec:'Bi'}, Po:{sym:'Po',name:'Polonium',pos:2,en:5.896,cls:'metal',spec:'Po'}, At:{sym:'At',name:'Astatine',pos:1,en:7.048,cls:'nonmetal',spec:'At'}, Rn:{sym:'Rn',name:'Radon',pos:0,en:6.523,cls:'noble_gas',spec:'Rn'}, Fr:{sym:'Fr',name:'Francium',pos:1,en:2.033,cls:'metal',spec:'Fr'}, Ra:{sym:'Ra',name:'Radium',pos:2,en:2.619,cls:'metal',spec:'Ra'}, Ac:{sym:'Ac',name:'Actinium',pos:3,en:3.108,cls:'metal',spec:'Ac'}, Th:{sym:'Th',name:'Thorium',pos:4,en:3.656,cls:'metal',spec:'Th'}, Pa:{sym:'Pa',name:'Protactinium',pos:5,en:3.606,cls:'metal',spec:'Pa'}, U:{sym:'U',name:'Uranium',pos:6,en:4.218,cls:'metal',spec:'U'}});  // full periodic table, substrate-solver derived (chi as en); open-4f lanthanides carry prov flag
+    // ---- substrate-derived atomic physics (eoe_en_solver.py outputs): IE & EA via delta-SCF on the
+    //      bound wavefront modes, chi=(IE+EA)/2, rA = <r> of the valence orbital. NO Pauling, NO fitting.
+    const ELEM_PHYS={H:{ie:13.607,ea:-0.346,chi:6.63,rA:0.794}, He:{ie:23.341,ea:0.053,chi:11.697,rA:0.491}, Li:{ie:5.618,ea:-0.118,chi:2.75,rA:2.306}, Be:{ie:8.157,ea:-0.109,chi:4.024,rA:1.506}, B:{ie:7.81,ea:-0.796,chi:3.507,rA:1.275}, C:{ie:9.862,ea:-0.524,chi:4.669,rA:0.959}, N:{ie:12.041,ea:-0.124,chi:5.959,rA:0.782}, O:{ie:14.366,ea:0.45,chi:7.408,rA:0.664}, F:{ie:16.846,ea:1.201,chi:9.024,rA:0.578}, Ne:{ie:19.488,ea:-0.055,chi:9.716,rA:0.513}, Na:{ie:5.134,ea:-0.099,chi:2.518,rA:2.27}, Mg:{ie:6.759,ea:-0.109,chi:3.325,rA:1.761}, Al:{ie:5.417,ea:-0.409,chi:2.504,rA:2.099}, Si:{ie:7.113,ea:0.117,chi:3.615,rA:1.586}, P:{ie:8.851,ea:0.775,chi:4.813,rA:1.312}, S:{ie:10.692,ea:1.571,chi:6.132,rA:1.131}, Cl:{ie:12.653,ea:2.505,chi:7.579,rA:1.0}, Ar:{ie:14.741,ea:-0.181,chi:7.28,rA:0.898}, K:{ie:4.196,ea:-0.07,chi:2.063,rA:2.74}, Ca:{ie:5.32,ea:-0.107,chi:2.607,rA:2.234}, Sc:{ie:5.703,ea:-2.191,chi:1.756,rA:2.091}, Ti:{ie:6.026,ea:-1.839,chi:2.093,rA:1.983}, V:{ie:6.32,ea:-1.525,chi:2.397,rA:1.895}, Cr:{ie:5.772,ea:-4.052,chi:0.86,rA:2.022}, Mn:{ie:6.867,ea:-0.986,chi:2.94,rA:1.754}, Fe:{ie:7.129,ea:-0.75,chi:3.189,rA:1.695}, Co:{ie:7.387,ea:-0.532,chi:3.428,rA:1.642}, Ni:{ie:7.642,ea:-0.329,chi:3.657,rA:1.594}, Cu:{ie:6.748,ea:-0.009,chi:3.37,rA:1.739}, Zn:{ie:8.149,ea:-0.109,chi:4.02,rA:1.509}, Ga:{ie:5.477,ea:-0.449,chi:2.514,rA:2.034}, Ge:{ie:6.979,ea:0.109,chi:3.544,rA:1.62}, As:{ie:8.513,ea:0.793,chi:4.653,rA:1.399}, Se:{ie:10.115,ea:1.586,chi:5.851,rA:1.249}, Br:{ie:11.798,ea:2.482,chi:7.14,rA:1.137}, Kr:{ie:13.567,ea:-0.181,chi:6.693,rA:1.047}, Rb:{ie:4.041,ea:-0.064,chi:1.988,rA:2.894}, Sr:{ie:5.113,ea:-0.106,chi:2.504,rA:2.419}, Y:{ie:5.639,ea:-1.273,chi:2.183,rA:2.241}, Zr:{ie:6.036,ea:-0.704,chi:2.666,rA:2.121}, Nb:{ie:5.727,ea:-1.815,chi:1.956,rA:2.186}, Mo:{ie:5.933,ea:-1.432,chi:2.25,rA:2.115}, Tc:{ie:6.943,ea:1.342,chi:4.142,rA:1.889}, Ru:{ie:6.29,ea:-0.515,chi:2.887,rA:1.999}, Rh:{ie:6.45,ea:-0.001,chi:3.225,rA:1.95}, Pd:{ie:6.791,ea:-0.048,chi:3.372,rA:0.813}, Ag:{ie:6.749,ea:0.012,chi:3.381,rA:1.865}, Cd:{ie:8.122,ea:-0.108,chi:4.007,rA:1.66}, In:{ie:5.35,ea:-0.24,chi:2.555,rA:2.163}, Sn:{ie:6.684,ea:0.326,chi:3.505,rA:1.8}, Sb:{ie:8.049,ea:0.973,chi:4.511,rA:1.593}, Te:{ie:9.463,ea:1.699,chi:5.581,rA:1.448}, I:{ie:10.934,ea:2.496,chi:6.715,rA:1.337}, Xe:{ie:12.47,ea:-0.181,chi:6.144,rA:1.248}, Cs:{ie:3.819,ea:-0.057,chi:1.881,rA:3.206}, Ba:{ie:4.849,ea:-0.104,chi:2.373,rA:2.723}, La:{ie:5.301,ea:0.105,chi:2.703,rA:2.548}, Ce:{ie:5.404,ea:-0.739,chi:2.332,rA:2.516,flag:1}, Pr:{ie:5.142,ea:-5.845,chi:-0.352,rA:2.619,flag:1}, Nd:{ie:5.232,ea:-5.572,chi:-0.17,rA:2.589,flag:1}, Pm:{ie:5.32,ea:-5.38,chi:-0.03,rA:2.561,flag:1}, Sm:{ie:5.408,ea:-5.257,chi:0.075,rA:2.535,flag:1}, Eu:{ie:5.494,ea:-5.193,chi:0.151,rA:2.509,flag:1}, Gd:{ie:6.01,ea:2.578,chi:4.294,rA:2.355}, Tb:{ie:5.666,ea:-5.216,chi:0.225,rA:2.462,flag:1}, Dy:{ie:5.752,ea:-5.293,chi:0.23,rA:2.44,flag:1}, Ho:{ie:5.838,ea:-5.408,chi:0.215,rA:2.418,flag:1}, Er:{ie:5.924,ea:-5.559,chi:0.182,rA:2.398,flag:1}, Tm:{ie:6.009,ea:-5.744,chi:0.133,rA:2.377,flag:1}, Yb:{ie:6.096,ea:-0.106,chi:2.995,rA:2.358}, Lu:{ie:6.748,ea:-1.011,chi:2.869,rA:2.204}, Hf:{ie:7.242,ea:-0.693,chi:3.274,rA:2.104}, Ta:{ie:7.662,ea:-0.017,chi:3.822,rA:2.026}, W:{ie:8.038,ea:0.705,chi:4.371,rA:1.962}, Re:{ie:8.384,ea:1.466,chi:4.925,rA:1.906}, Os:{ie:8.71,ea:2.263,chi:5.486,rA:1.858}, Ir:{ie:9.02,ea:3.094,chi:6.057,rA:1.814}, Pt:{ie:7.966,ea:1.231,chi:4.598,rA:1.925}, Au:{ie:8.159,ea:0.055,chi:4.107,rA:1.889}, Hg:{ie:9.888,ea:-0.108,chi:4.89,rA:1.705}, Tl:{ie:5.645,ea:-0.161,chi:2.742,rA:2.208}, Pb:{ie:7.093,ea:0.403,chi:3.748,rA:1.874}, Bi:{ie:8.559,ea:1.034,chi:4.796,rA:1.68}, Po:{ie:10.063,ea:1.728,chi:5.896,rA:1.543}, At:{ie:11.617,ea:2.48,chi:7.048,rA:1.437}, Rn:{ie:13.226,ea:-0.181,chi:6.523,rA:1.351}, Fr:{ie:4.12,ea:-0.055,chi:2.033,rA:3.36}, Ra:{ie:5.339,ea:-0.102,chi:2.619,rA:2.881}, Ac:{ie:5.892,ea:0.323,chi:3.108,rA:2.702}, Th:{ie:6.362,ea:0.95,chi:3.656,rA:2.57}, Pa:{ie:6.135,ea:1.077,chi:3.606,rA:2.632}, U:{ie:6.247,ea:2.189,chi:4.218,rA:2.602}};
+    // Bond character from physics, not a threshold: does the electron actually move? Donor = lower chi.
+    // Cost = IE(donor) - EA(acceptor) - Coulomb pull at the distance the orbitals themselves set.
+    // A metal+nonmetal pair forms an extended (lattice) bond -> Madelung 1.748 (rocksalt, a geometric
+    // constant); a nonmetal pair forms a single molecular bond -> 1. dE<0 => transfer => ionic.
+    function transferEnergy(a,b,lattice){ var pa=ELEM_PHYS[a.sym], pb=ELEM_PHYS[b.sym]; if(!pa||!pb) return null;
+      var don=(pa.chi<=pb.chi)?pa:pb, acc=(pa.chi<=pb.chi)?pb:pa, dsym=(pa.chi<=pb.chi)?a.sym:b.sym;
+      var d=(pa.rA+pb.rA)||1.0, M=lattice?1.748:1.0;
+      return {dE:(don.ie - acc.ea - M*14.399/d), donor:dsym}; }
 
     // curated products (already-measured molecules carry their substrate M)
     const PROD = {
@@ -1082,8 +1097,10 @@
             reason:'Gold holds its own closure against almost everything \u2014 even oxygen leaves it untouched. Its coupling positions are real, but nothing here pulls hard enough to open them.'};
         }
       }
-      const dEN=Math.abs(a.en-b.en);
-      const ionic = dEN>=1.7 && ((a.cls==='metal'&&b.cls==='nonmetal')||(b.cls==='metal'&&a.cls==='nonmetal'));
+      const mn = (a.cls==='metal'&&b.cls==='nonmetal')||(b.cls==='metal'&&a.cls==='nonmetal');
+      const tr = transferEnergy(a,b,mn);                 // physics: does the electron move?
+      const ionic = mn && (tr ? tr.dE<0 : false);        // transfer favourable (dE<0) => ionic/lattice
+      const dEhint = tr ? tr.dE : null;
       let p=PROD[key]||null;
       // coupling-position derivation: an uncurated ATOM+ATOM pair forms a valid closure
       // we can NAME, but only render it if we actually have a spectrum for it. With no
@@ -1111,11 +1128,11 @@
       const violent = (a.sym==='F'||b.sym==='F');
       let reason;
       if(ionic){
-        reason='Large electronegativity gap ('+dEN.toFixed(2)+'): one closure pulls the shared coupling so hard it takes it outright. The bond is ionic \u2014 the two lock as oppositely-charged closures.';
+        reason='The lower-\u03C7 closure ('+(tr?tr.donor:'')+') gives up its coupling electron \u2014 transfer energy '+(dEhint!==null?dEhint.toFixed(2):'')+' eV is favourable, so the two lock as oppositely-charged closures. The bond is ionic (an extended lattice).';
       } else {
-        reason='Both carry open coupling positions and the electronegativity pull ('+dEN.toFixed(2)+') is moderate \u2014 they share the coupling. A covalent closure forms.';
+        reason='Neither closure gives up its electron cheaply '+(dEhint!==null?'(transfer would cost '+dEhint.toFixed(2)+' eV)':'')+' \u2014 they share the coupling instead. A covalent closure forms.';
       }
-      if(violent) reason='Fluorine has one open position and the strongest pull there is (EN 3.98). '+reason;
+      if(violent) reason='Fluorine has one open position and the strongest pull there is (derived \u03C7 9.02 eV \u2014 the deepest of any element). '+reason;
       return {couples:true, kind:ionic?'ionic':'covalent', product:p, violent:violent, reason:reason};
     }
 
@@ -1569,7 +1586,7 @@
       else { panelFor(A.spec, A.name); if(y<BIH-260){ y+=10; panelFor(B.spec, B.name); } }
 
       x.fillStyle='#5f7299'; x.font='300 19px system-ui, sans-serif';
-      x.fillText('Reactivity read at the valence scale (open coupling positions + electronegativity) \u2014 not the nuclear M the table shows.', 44, BIH-58);
+      x.fillText('Reactivity read at the valence scale (open coupling positions + sink) \u2014 not the nuclear M the table shows.', 44, BIH-58);
       x.fillText('Spectrum is the honest object; colour is a lens projecting it. Human lens = CIE 1931 cone integration \u2192 sRGB. Nothing is painted.', 44, BIH-32);
       bitex.needsUpdate=true; }
 
@@ -1649,8 +1666,13 @@
         shelfElements.forEach(function(key){ if(!REAG[key]) return; const el=document.createElement('div'); el.className='chip elchip'; el.setAttribute('data-key',key);
           el.innerHTML='<span class="elsym">'+REAG[key].sym+'</span><span class="elx" title="remove from shelf">\u00d7</span>';
           el.querySelector('.elsym').addEventListener('click',function(){ benchPick=key; refreshPicker(); });
-          el.querySelector('.elx').addEventListener('click',function(ev){ ev.stopPropagation(); shelfElements=shelfElements.filter(function(k){return k!==key;}); if(benchPick===key&&shelfElements[0]) benchPick=shelfElements[0]; rebuildPicker();
-            window.__benchReturn=true; tableEditMode=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
+          el.querySelector('.elx').addEventListener('click',function(ev){ ev.stopPropagation(); shelfElements=shelfElements.filter(function(k){return k!==key;}); if(benchPick===key&&shelfElements[0]) benchPick=shelfElements[0]; rebuildPicker(); });
+          pk.appendChild(el); });
+        REAG_ORDER.forEach(function(key){ if(shelfElements.indexOf(key)>=0||!REAG[key]) return;   // measured elements you've taken off the shelf — one tap to add back
+          const el=document.createElement('div'); el.className='chip elchip eloff'; el.setAttribute('data-key',key);
+          el.innerHTML='<span class="elsym">'+REAG[key].sym+'</span><span class="eladdbk">+</span>';
+          el.title='add '+(REAG[key].name||key)+' back to your bench';
+          el.addEventListener('click',function(){ if(shelfElements.indexOf(key)<0) shelfElements.push(key); benchPick=key; rebuildPicker(); });
           pk.appendChild(el); });
         const add=document.createElement('div'); add.className='chip eladd'; add.textContent='+ add from table'; add.title='go to the periodic table and tap elements to add them';
         add.addEventListener('click',function(){ window.__benchReturn=true; tableEditMode=true; if(window.__eoeSetMode) window.__eoeSetMode('table'); });
