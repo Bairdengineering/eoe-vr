@@ -2229,5 +2229,102 @@
     if(cosS){ cosS.addEventListener('input',()=>{ cosV.textContent=cosS.value+'%'; if(window.__eoeSetCosmos) window.__eoeSetCosmos(+cosS.value/100); }); }
   })();
   </script>
+  <script>
+  /* EoE laptop panel arranger — drag by header, resize from corner, snap to keep it tight,
+     remember layout, and a Reset that returns to the default home base. DOM-only (desktop);
+     the 3D panels get their own arrange pass next. */
+  (function(){
+    var PANELS=['molPicker','benchPanel','bookPanel','cellPanel'];
+    var GRID=8, SNAP=11, MINW=150, MINH=120, KEY='eoe_panel_layout_v1';
+    var defaults={}, active=null;
+
+    var st=document.createElement('style');
+    st.textContent=
+      '.eoe-arr{box-sizing:border-box;}'+
+      '.eoe-arr > .hd{cursor:grab;}'+
+      '.eoe-arr.eoe-grab > .hd{cursor:grabbing;}'+
+      '.eoe-rsz{position:absolute;right:2px;bottom:2px;width:17px;height:17px;cursor:nwse-resize;z-index:6;'+
+        'background:linear-gradient(135deg,transparent 46%,rgba(212,160,73,0.5) 46%,rgba(212,160,73,0.5) 60%,transparent 60%,transparent 72%,rgba(212,160,73,0.5) 72%,rgba(212,160,73,0.5) 86%,transparent 86%);border-bottom-right-radius:12px;}'+
+      '#eoeReset{position:fixed;bottom:8px;right:10px;z-index:9999;font:600 11px ui-monospace,Menlo,monospace;'+
+        'color:#9fb3d6;background:rgba(7,9,15,0.82);border:1px solid rgba(212,160,73,0.3);border-radius:8px;'+
+        'padding:5px 9px;cursor:pointer;letter-spacing:0.4px;user-select:none;}'+
+      '#eoeReset:hover{color:#ffe2a6;border-color:rgba(236,183,78,0.7);}';
+    document.head.appendChild(st);
+
+    function px(v){return Math.round(v)+'px';}
+    function rect(el){var r=el.getBoundingClientRect();return{l:r.left,t:r.top,w:r.width,h:r.height};}
+    function visible(el){return el && getComputedStyle(el).display!=='none';}
+
+    function captureDefaults(){
+      PANELS.forEach(function(id){
+        var el=document.getElementById(id); if(!el) return;
+        el.classList.add('eoe-arr');
+        var d=el.style.display, v=el.style.visibility;
+        el.style.visibility='hidden'; el.style.display='block';
+        var r=el.getBoundingClientRect(), cs=getComputedStyle(el);
+        defaults[id]={l:parseFloat(cs.left)||r.left, t:parseFloat(cs.top)||r.top, w:r.width, h:0};
+        el.style.display=d; el.style.visibility=v;
+        var h=document.createElement('div'); h.className='eoe-rsz'; el.appendChild(h);
+        h.addEventListener('pointerdown',function(e){ startResize(id,e); });
+        var hd=el.querySelector('.hd');
+        if(hd) hd.addEventListener('pointerdown',function(e){ if(e.target&&e.target.id==='bookClose')return; startDrag(id,e); });
+      });
+    }
+    function applyGeom(id,g){
+      var el=document.getElementById(id); if(!el) return;
+      el.style.left=px(g.l); el.style.top=px(g.t); el.style.right='auto';
+      if(g.w) el.style.width=px(g.w);
+      if(g.h&&g.h>0){ el.style.height=px(g.h); el.style.maxHeight='none'; el.style.overflowY='auto'; }
+      else { el.style.height=''; }
+    }
+    function save(){
+      var o={}; PANELS.forEach(function(id){ var el=document.getElementById(id); if(!el)return;
+        o[id]={l:parseFloat(el.style.left)||defaults[id].l, t:parseFloat(el.style.top)||defaults[id].t,
+               w:parseFloat(el.style.width)||defaults[id].w, h:parseFloat(el.style.height)||0}; });
+      try{ localStorage.setItem(KEY,JSON.stringify(o)); }catch(e){}
+    }
+    function load(){ var raw=null; try{ raw=localStorage.getItem(KEY); }catch(e){}
+      if(!raw) return; try{ var o=JSON.parse(raw); PANELS.forEach(function(id){ if(o[id]) applyGeom(id,o[id]); }); }catch(e){} }
+    function reset(){ try{ localStorage.removeItem(KEY); }catch(e){}
+      PANELS.forEach(function(id){ var el=document.getElementById(id); if(!el)return;
+        el.style.left=px(defaults[id].l); el.style.top=px(defaults[id].t); el.style.width=px(defaults[id].w);
+        el.style.height=''; el.style.overflowY=''; el.style.maxHeight=''; el.style.right='auto'; }); }
+
+    function targets(exceptId){ var xs=[0,innerWidth], ys=[0,innerHeight];
+      PANELS.forEach(function(id){ if(id===exceptId)return; var el=document.getElementById(id); if(!visible(el))return;
+        var r=rect(el); xs.push(r.l,r.l+r.w); ys.push(r.t,r.t+r.h); }); return {xs:xs,ys:ys}; }
+    function snapEdge(lead,trail,list){ var best=SNAP+1, val=null;
+      list.forEach(function(x){ if(Math.abs(lead-x)<best){best=Math.abs(lead-x);val=x;}
+        if(Math.abs(trail-x)<best){best=Math.abs(trail-x);val=x-(trail-lead);} });
+      return best<=SNAP?val:Math.round(lead/GRID)*GRID; }
+    function snapMove(id,l,t,w,h){ var T=targets(id);
+      l=snapEdge(l,l+w,T.xs); t=snapEdge(t,t+h,T.ys);
+      l=Math.max(0,Math.min(innerWidth-w,l)); t=Math.max(0,Math.min(innerHeight-h,t)); return {l:l,t:t}; }
+    function snapSize(id,l,t,w,h){ var T=targets(id), best;
+      best=SNAP+1; T.xs.forEach(function(x){ if(Math.abs((l+w)-x)<best){best=Math.abs((l+w)-x);w=x-l;} }); if(best>SNAP) w=Math.round(w/GRID)*GRID;
+      best=SNAP+1; T.ys.forEach(function(y){ if(Math.abs((t+h)-y)<best){best=Math.abs((t+h)-y);h=y-t;} }); if(best>SNAP) h=Math.round(h/GRID)*GRID;
+      w=Math.max(MINW,Math.min(innerWidth-l,w)); h=Math.max(MINH,Math.min(innerHeight-t,h)); return {w:w,h:h}; }
+
+    function startDrag(id,e){ var el=document.getElementById(id); var r=rect(el);
+      active={mode:'drag',id:id,el:el,ox:e.clientX-r.l,oy:e.clientY-r.t,w:r.w,h:r.h};
+      el.classList.add('eoe-grab'); el.style.zIndex=60; try{e.target.setPointerCapture(e.pointerId);}catch(_){}
+      e.preventDefault(); e.stopPropagation(); }
+    function startResize(id,e){ var el=document.getElementById(id); var r=rect(el);
+      active={mode:'rsz',id:id,el:el,l:r.l,t:r.t}; el.style.zIndex=60;
+      try{e.target.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); e.stopPropagation(); }
+
+    document.addEventListener('pointermove',function(e){ if(!active)return;
+      if(active.mode==='drag'){ var s=snapMove(active.id,e.clientX-active.ox,e.clientY-active.oy,active.w,active.h);
+        active.el.style.left=px(s.l); active.el.style.top=px(s.t); active.el.style.right='auto'; }
+      else { var l=active.l,t=active.t; var s=snapSize(active.id,l,t,e.clientX-l,e.clientY-t);
+        active.el.style.width=px(s.w); active.el.style.height=px(s.h); active.el.style.maxHeight='none'; active.el.style.overflowY='auto'; } });
+    document.addEventListener('pointerup',function(){ if(!active)return; active.el.classList.remove('eoe-grab'); active=null; save(); });
+
+    function init(){ captureDefaults(); load();
+      var rb=document.createElement('div'); rb.id='eoeReset'; rb.textContent='\u21BA reset layout'; rb.title='Return panels to the default home base';
+      rb.addEventListener('click',reset); document.body.appendChild(rb); }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+  })();
+  </script>
 </body>
 </html>
