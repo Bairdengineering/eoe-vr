@@ -1818,7 +1818,7 @@
         vec3 lp=normalize(position); vLP=lp;
         float th=acos(clamp(lp.z,-1.0,1.0));   // polar angle from the cell's central axis (cell centre = pole)
         float ph=atan(lp.y,lp.x);              // true circular angle
-        float rho=th/3.14159265;               // radial: linear in angle (no x/y grid stamp)
+        float rho=1.0-abs(1.0-2.0*(th/3.14159265));   // symmetric wrap: back mirrors front, seamless at the equator (no "different back")
         float sth=max(sin(th),0.04);
         float pf=smoothstep(0.0,0.16,sin(th));   // fade the coarse field relief into a smooth cap at the poles (kills the radial-spoke pinch)
         vFuv=uCenter+vec2(cos(ph),sin(ph))*(rho*uW);
@@ -1857,7 +1857,7 @@
         float bumpH=rec*uRelief;
         vec3 Nb=normalize(normalize(vN) - vec3(dFdx(bumpH), dFdy(bumpH), 0.0));   // fine relief rides the smooth coarse normal
         vec3 V=normalize(-vVP);
-        float h=clamp(mix(0.5, sm(vFuv), smoothstep(0.05,0.20,sqrt(max(0.0,1.0-lp.z*lp.z)))) + rec*uColAmp, 0.0, 1.0);   // base field faded to a neutral cap at the poles; even recursion still carries the texture
+        float h=clamp(mix(0.5, sm(vFuv), 0.65*smoothstep(0.05,0.20,sqrt(max(0.0,1.0-lp.z*lp.z)))) + rec*uColAmp, 0.0, 1.0);   // base field faded at poles + softened; even recursion carries the surface
         float lit=0.4+0.6*clamp(dot(Nb,normalize(vec3(0.35,0.5,0.78))),0.0,1.0);
         float fres=pow(1.0-clamp(dot(Nb,V),0.0,1.0),2.2);
         float M=uChi*h-uLam; float Mn=clamp((M+0.5)*0.5,0.0,1.0);                        // colour IS the engine quantity M = chi*s - lambda
@@ -1917,7 +1917,7 @@
     let _monAnim=null, _monPrevCell=false;   // one-shot pull-out animation (honeycomb -> whole cell)
     const monCanvas=document.createElement('canvas'); monCanvas.width=256; monCanvas.height=256; const monCtx=monCanvas.getContext('2d');
     const monTex=new THREE.CanvasTexture(monCanvas); monTex.minFilter=THREE.LinearFilter; monTex.magFilter=THREE.LinearFilter;
-    const fieldMon=new THREE.Sprite(new THREE.SpriteMaterial({map:monTex,transparent:true,depthWrite:false}));
+    const fieldMon=new THREE.Mesh(new THREE.PlaneGeometry(1,1), new THREE.MeshBasicMaterial({map:monTex,transparent:true,depthWrite:false,side:THREE.DoubleSide}));
     fieldMon.visible=false; cellGroup.add(fieldMon);
     function drawMonitor(){ const N=AQ.N; const c=(_lastComps&&_lastComps.length)?_lastComps[0]:null;
       // Zoom: slider left (monZoom=1) starts on the membrane honeycomb; slider right (monZoom=6)
@@ -2105,7 +2105,8 @@
     const ctrlPanel=new THREE.Mesh(new THREE.PlaneGeometry(0.66,0.66*760/720), new THREE.MeshBasicMaterial({map:ctrlTex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     ctrlPanel.renderOrder=20; ctrlPanel.visible=false; scene.add(ctrlPanel);
     let ctrlButtons=[]; let ctrlHover=null; let ctrlRecSliderRect=null;
-    let cellOrbitYaw=0, cellDist=0;   // VR turntable: orbit + distance of the cell (you stay put)
+    let cellOrbitYaw=0, cellDist=0, cellYaw=0;   // VR: orbit + distance of the cell; cellYaw rotates the whole room to face you on entry (rig untouched)
+    const _tmpRot=new THREE.Vector3(), _headP=new THREE.Vector3();
     let benchScrollY=0, benchContentH=760, ctrlSaveMsg='', ctrlView='bench';   // VR bench panel scroll + save flash + sub-view
     function cpBtn(x,y,w,h,label,id,on,fn,kind){
       const hov=(ctrlHover===id);
@@ -2250,7 +2251,11 @@
       if(!bench){ eqPlane.visible=false; const hs=document.getElementById('hintStrip'); if(hs) hs.classList.remove('show'); }
       cellGroup.visible=cell; cellInfo.visible=cell;
       const cpan=document.getElementById('cellPanel'); if(cpan) cpan.classList.toggle('show', cell && !renderer.xr.isPresenting);
-      if(cell){ cellReset(); cellOrbitYaw=0; cellDist=0; }
+      if(cell){ cellReset(); cellOrbitYaw=0; cellDist=0; cellYaw=0;
+        if(renderer.xr.isPresenting){   // rotate the ROOM (not you) so the cell + panels sit in front of where you're looking
+          const xrCam=(renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
+          const _hf=new THREE.Vector3(); xrCam.getWorldDirection(_hf); _hf.y=0;
+          if(_hf.lengthSq()>1e-6){ const headYaw=Math.atan2(_hf.x,_hf.z); cellYaw=headYaw-Math.PI; } } }   // baseline content faces -Z (atan2=PI); rotate by the difference
       const mp=document.getElementById('molPicker'); if(mp) mp.classList.toggle('show', mol && !renderer.xr.isPresenting); molShelf.visible = mol && renderer.xr.isPresenting;
       const bp=document.getElementById('benchPanel'); if(bp) bp.classList.toggle('show', bench && !renderer.xr.isPresenting);
       const bdom=document.getElementById('benchDom'); if(bdom) bdom.classList.toggle('show', bench && !renderer.xr.isPresenting);
@@ -2359,7 +2364,7 @@
 
       if(!menuVisible) menuCursor.visible=false;
       if(renderer.xr.isPresenting && !menuVisible && mode==='bench'){ ctrlPanel.position.set(-1.9,1.5,-2.2); ctrlPanel.rotation.set(0,0.42,0); ctrlPanel.visible=true; }
-      else if(renderer.xr.isPresenting && !menuVisible && mode==='cell'){ ctrlPanel.position.set(-1.95,1.6,-2.4); ctrlPanel.rotation.set(0,0.45,0); ctrlPanel.visible=true; }
+      else if(renderer.xr.isPresenting && !menuVisible && mode==='cell'){ const cy=Math.cos(cellYaw), sy=Math.sin(cellYaw), bx=-1.95, bz=-2.4; ctrlPanel.position.set(bx*cy+bz*sy,1.6,-bx*sy+bz*cy); ctrlPanel.rotation.set(0,0.45+cellYaw,0); ctrlPanel.visible=true; }
       else ctrlPanel.visible=false;
       benchInfo.visible = renderer.xr.isPresenting && !menuVisible && mode==='bench';
       infoPlane.visible = renderer.xr.isPresenting && !menuVisible && mode==='table' && !!showcase;
@@ -2368,11 +2373,17 @@
       { const _cellOn=(mode==='cell'); const _inVR=renderer.xr.isPresenting; const _surf=(cellView==='surface');
         cellSurf.visible=_cellOn&&_surf; vesGroup.visible=_cellOn&&!_surf; fieldPlane.visible=false; aqFrame.visible=false; aqGlow.visible=false;
         fieldMon.visible=_cellOn;
-        if(_cellOn){ const sc=_inVR?2.5:1.0, tilt=_inVR?0:-0.42, zp=CELL.center.z+(_inVR?-0.8:0)-(_inVR?cellDist:0), yaw=_inVR?cellOrbitYaw:0;
-          cellSurf.scale.setScalar(sc); cellSurf.position.set(CELL.center.x,CELL.center.y,zp); cellSurf.rotation.set(tilt,yaw,0);
-          vesGroup.scale.setScalar(sc); vesGroup.position.set(CELL.center.x,CELL.center.y,zp); vesGroup.rotation.set(tilt,yaw,0);
+        if(_cellOn){ const sc=_inVR?2.5:1.0, tilt=_inVR?0:-0.42, zp=CELL.center.z+(_inVR?-0.8:0)-(_inVR?cellDist:0);
+          const cy=Math.cos(cellYaw), sy=Math.sin(cellYaw);
+          _tmpRot.set(CELL.center.x*cy+zp*sy, CELL.center.y, -CELL.center.x*sy+zp*cy);   // cell body, rotated to face you
+          cellSurf.scale.setScalar(sc); cellSurf.position.copy(_tmpRot); cellSurf.rotation.set(tilt,cellYaw+cellOrbitYaw,0);
+          vesGroup.scale.setScalar(sc); vesGroup.position.copy(_tmpRot); vesGroup.rotation.set(tilt,cellYaw+cellOrbitYaw,0);
           const ms=_inVR?1.7:0.95; fieldMon.scale.set(ms,ms,1);
-          fieldMon.position.set(CELL.center.x-(_inVR?3.2:1.6), CELL.center.y+(_inVR?0.3:0.1), CELL.center.z+(_inVR?-0.2:0.4)); } }
+          { const bx=CELL.center.x-(_inVR?3.2:1.6), bz=CELL.center.z+(_inVR?-0.2:0.4);
+            fieldMon.position.set(bx*cy+bz*sy, CELL.center.y+(_inVR?0.3:0.1), -bx*sy+bz*cy);
+            const _cam=(_inVR&&renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera; _cam.getWorldPosition(_headP);
+            fieldMon.lookAt(_headP.x, fieldMon.position.y, _headP.z); }   // fixed panel: faces your position, no billboard spin with head turn
+          { const bx=1.95, bz=-2.55; cellInfo.position.set(bx*cy+bz*sy, 1.7, -bx*sy+bz*cy); cellInfo.rotation.set(0,-0.45+cellYaw,0); } } }
       if(renderer.xr.isPresenting && xrSession){
         const srcs=xrSession.inputSources;
         { let dg='ctrls:'+srcs.length; for(let k=0;k<srcs.length;k++){ const s=srcs[k], g=s&&s.gamepad, hd=(s&&s.handedness)?s.handedness[0].toUpperCase():'?'; dg+=' ['+hd+(g&&g.buttons[0]&&g.buttons[0].pressed?' t1':' t0')+(g&&g.buttons[1]&&g.buttons[1].pressed?' g1':' g0')+']'; } vrDiag=dg; }
