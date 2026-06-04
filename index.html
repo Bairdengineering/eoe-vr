@@ -240,7 +240,7 @@
     <button id="cellFeed">Feeding — let go</button>
     <button id="cellNew" style="margin-top:8px;background:rgba(74,144,212,0.12);color:#cdd9ef;">Reseed</button>
     <button id="cellView" style="margin-top:8px;background:rgba(126,178,127,0.14);color:#cdd9ef;">View: closures</button>
-    <div style="margin-top:10px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">monitor zoom</span><input id="cellZoom" type="range" min="1" max="6" step="0.1" value="6" style="flex:1;accent-color:#ecb74e;"></div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">monitor zoom</span><input id="cellZoom" type="range" min="1" max="6" step="0.1" value="1" style="flex:1;accent-color:#ecb74e;"></div>
     <div style="margin-top:10px;border-top:1px solid rgba(120,140,180,0.18);padding-top:8px;">
       <div style="color:#9fb3d6;font-size:11px;margin-bottom:6px;">machinery — the battery holds the genome</div>
       <canvas id="machHud" width="214" height="100" style="width:100%;display:block;border-radius:8px;"></canvas>
@@ -1805,11 +1805,27 @@
     let cellView='closures';
     const vesGroup=new THREE.Group(); vesGroup.position.copy(CELL.center); cellGroup.add(vesGroup);
     const vesPool=[];
+    // 3D honeycomb membrane: a sphere whose surface is pushed out along the live field ridges (like the
+    // field-surface relief, wrapped onto the cell). Each cell samples its own patch of the field.
+    const _memVert=`uniform sampler2D uField; uniform vec2 uOff; uniform vec2 uRep; uniform float uDisp;
+      varying float vH; varying vec3 vNrm;
+      void main(){ vec2 fuv=uv*uRep+uOff; float h=texture2D(uField,fuv).a; vH=h;
+        vNrm=normalize(mat3(modelMatrix)*normal);
+        vec3 p=position+normal*(h*uDisp);
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); }`;
+    const _memFrag=`varying float vH; varying vec3 vNrm;
+      void main(){ float lit=0.5+0.5*clamp(dot(vNrm,normalize(vec3(0.35,0.55,0.75))),0.0,1.0);
+        vec3 lo=vec3(0.05,0.035,0.025), hi=vec3(0.97,0.74,0.32);
+        vec3 col=mix(lo,hi,clamp(vH*1.3,0.0,1.0))*(0.45+0.75*lit);
+        gl_FragColor=vec4(col,1.0); }`;
+    function makeMembraneMat(){ return new THREE.ShaderMaterial({
+      uniforms:{ uField:{value:fieldTex}, uOff:{value:new THREE.Vector2(0,0)}, uRep:{value:new THREE.Vector2(1,1)}, uDisp:{value:0.34} },
+      vertexShader:_memVert, fragmentShader:_memFrag, side:THREE.FrontSide }); }
     for(let i=0;i<48;i++){ const g=new THREE.Group();
-      const ftex=new THREE.CanvasTexture(fieldCanvas); ftex.minFilter=THREE.LinearFilter; ftex.magFilter=THREE.LinearFilter; ftex.wrapS=ftex.wrapT=THREE.ClampToEdgeWrapping;
-      const skin=new THREE.Mesh(new THREE.SphereGeometry(1,30,22), new THREE.MeshBasicMaterial({map:ftex,color:0xffffff,transparent:true,opacity:0.92,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.FrontSide}));
-      const lat=new THREE.Mesh(new THREE.SphereGeometry(1.004,16,12), new THREE.MeshBasicMaterial({color:0xe8c46a,wireframe:true,transparent:true,opacity:0.12,blending:THREE.AdditiveBlending,depthWrite:false}));
-      g.userData.ftex=ftex; g.add(skin,lat); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
+      const mat=makeMembraneMat();
+      const skin=new THREE.Mesh(new THREE.SphereGeometry(1,48,32), mat);
+      const lat=new THREE.Mesh(new THREE.SphereGeometry(1.36,20,15), new THREE.MeshBasicMaterial({color:0xe8c46a,wireframe:true,transparent:true,opacity:0.16,blending:THREE.AdditiveBlending,depthWrite:false}));
+      g.userData.mat=mat; g.add(skin,lat); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
     const _vseen=new Uint8Array(AQ.N*AQ.N); let _lastComps=[];
     function extractClosures(){ const N=AQ.N, n=N*N, thr=0.24, minA=5; _vseen.fill(0); const comps=[], st=[];
       for(let s0=0;s0<n;s0++){ if(Pfield[s0]>thr && !_vseen[s0]){ let a=0,sx=0,sy=0,sxx=0,syy=0,sxy=0; st.length=0; st.push(s0); _vseen[s0]=1;
@@ -1837,29 +1853,29 @@
         // and ignore the noisy angle of a near-round blob so a forming cell grows smoothly instead of flipping.
         const _elong=c.s1/Math.max(c.s2,1e-3);
         if(_elong>1.15){ let d=(-c.th)-g.rotation.z; d-=Math.PI*Math.round(d/Math.PI); g.rotation.z+=d*0.22; }
-        const _ut=g.userData.ftex; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.repeat.set((2*w)/N,(2*w)/N); _ut.offset.set((c.cx-w)/N,1-(c.cy+w)/N); _ut.needsUpdate=true; } }
+        const _ut=g.userData.mat; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.uniforms.uRep.value.set((2*w)/N,(2*w)/N); _ut.uniforms.uOff.value.set((c.cx-w)/N,1-(c.cy+w)/N); } }
       for(let vi=0;vi<active.length;vi++){ if(vUsed[vi]) continue; const u=active[vi].userData; u.miss++; if(u.miss>_MISS_MAX) u.on=false; }   // its blob vanished: hold a few frames, then let it go
       for(let ci=0;ci<comps.length;ci++){ if(claimed[ci]) continue; const c=comps[ci];   // an unmatched blob is a birth — a fresh vesicle appears where it split
         let g=null; for(const v of vesPool){ if(!v.userData.on){ g=v; break; } } if(!g) continue;
         g.userData.on=true; g.userData.cx=c.cx; g.userData.cy=c.cy; g.userData.miss=0;
         g.visible=true; g.position.set((c.cx/N-0.5)*S,(0.5-c.cy/N)*S,0); g.scale.set(0.02,0.02,0.02); g.rotation.z=(c.s1/Math.max(c.s2,1e-3)>1.15)?-c.th:0;
-        { const _ut=g.userData.ftex; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.repeat.set((2*w)/N,(2*w)/N); _ut.offset.set((c.cx-w)/N,1-(c.cy+w)/N); _ut.needsUpdate=true; } } }
+        { const _ut=g.userData.mat; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.uniforms.uRep.value.set((2*w)/N,(2*w)/N); _ut.uniforms.uOff.value.set((c.cx-w)/N,1-(c.cy+w)/N); } } }
       for(const g of vesPool){ if(!g.userData.on){ g.scale.multiplyScalar(0.82); if(g.scale.x<0.01) g.visible=false; } } }
     // side monitor: the flat field, zoomable — the close-up detail kept beside the big closures
-    let monZoom=6;                 // start fully zoomed in on the membrane honeycomb
+    let monZoom=1;                 // start on the membrane honeycomb; drag right to pull out to the whole cell
     let _monAnim=null, _monPrevCell=false;   // one-shot pull-out animation (honeycomb -> whole cell)
     const monCanvas=document.createElement('canvas'); monCanvas.width=256; monCanvas.height=256; const monCtx=monCanvas.getContext('2d');
     const monTex=new THREE.CanvasTexture(monCanvas); monTex.minFilter=THREE.LinearFilter; monTex.magFilter=THREE.LinearFilter;
     const fieldMon=new THREE.Sprite(new THREE.SpriteMaterial({map:monTex,transparent:true,depthWrite:false}));
     fieldMon.visible=false; cellGroup.add(fieldMon);
     function drawMonitor(){ const N=AQ.N; const c=(_lastComps&&_lastComps.length)?_lastComps[0]:null;
-      // Continuity zoom: monZoom=1 frames the WHOLE CELL (same footprint as the 3D sphere);
-      // monZoom=6 dives all the way into the membrane honeycomb. Geometric blend = even, natural zoom.
+      // Zoom: slider left (monZoom=1) starts on the membrane honeycomb; slider right (monZoom=6)
+      // pulls all the way out to the whole cell. Geometric blend = even, natural zoom.
       const cellR = c ? c.r : N*0.22;
-      const srcOut = Math.min(N, 2.2*cellR);                 // out: the cell, framed like the 3D version
-      const srcIn  = Math.max(11, srcOut*0.18);               // in: membrane honeycomb
-      const tz = (Math.min(6,Math.max(1,monZoom)) - 1) / 5;   // 0 = out, 1 = in
-      const src = Math.max(8, Math.min(N, srcOut*Math.pow(srcIn/srcOut, tz)));
+      const srcOut = Math.min(N, 2.2*cellR);                 // right: the whole cell
+      const srcIn  = Math.max(11, srcOut*0.18);              // left: membrane honeycomb (start)
+      const tz = (Math.min(6,Math.max(1,monZoom)) - 1) / 5;  // 0 = honeycomb, 1 = whole cell
+      const src = Math.max(8, Math.min(N, srcIn*Math.pow(srcOut/srcIn, tz)));
       const cx=c?c.cx:N/2, cy=c?c.cy:N/2;
       const ox=Math.max(0,Math.min(N-src, cx-src/2)), oy=Math.max(0,Math.min(N-src, cy-src/2));
       monCtx.fillStyle='#06080e'; monCtx.fillRect(0,0,256,256);
@@ -2163,8 +2179,8 @@
         cpBtn(40,548,310,56,'Editor: '+(MACH.editor?'on':'off'),'macheditor',MACH.editor,()=>{ MACH.editor=!MACH.editor; drawCtrl(); });
         cpBtn(370,548,310,56,'Sex: '+(MACH.sex?'on':'off'),'machsex',MACH.sex,()=>{ MACH.sex=!MACH.sex; drawCtrl(); });
         cpBtn(40,616,300,48,'View: '+(cellView==='closures'?'closures':'field'),'cellview',false,()=>{ cellView=(cellView==='closures')?'surface':'closures'; drawCtrl(); });
-        cpBtn(356,616,150,48,'zoom -','zoomout',false,()=>{ _monAnim=null; monZoom=Math.max(1,monZoom-0.6); drawCtrl(); });
-        cpBtn(522,616,158,48,'zoom +','zoomin',false,()=>{ _monAnim=null; monZoom=Math.min(6,monZoom+0.6); drawCtrl(); });
+        cpBtn(356,616,150,48,'zoom -','zoomout',false,()=>{ _monAnim=null; monZoom=Math.min(6,monZoom+0.6); drawCtrl(); });
+        cpBtn(522,616,158,48,'zoom +','zoomin',false,()=>{ _monAnim=null; monZoom=Math.max(1,monZoom-0.6); drawCtrl(); });
         cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText('Point a controller here · trigger to select',40,690);
       }
       ctrlTex.needsUpdate=true; }
@@ -2294,13 +2310,6 @@
       { const _cellOn=(mode==='cell'); const _inVR=renderer.xr.isPresenting; const _surf=(cellView==='surface');
         cellSurf.visible=_cellOn&&_surf; vesGroup.visible=_cellOn&&!_surf; fieldPlane.visible=false; aqFrame.visible=false; aqGlow.visible=false;
         fieldMon.visible=_cellOn;
-        if(_cellOn && !_monPrevCell){ monZoom=6; _monAnim={t:0}; }   // entered cell mode: reset to honeycomb, start pull-out
-        if(_monAnim && _cellOn){ _monAnim.t=Math.min(1,_monAnim.t+dt/2.6);
-          const e=1-Math.pow(1-_monAnim.t,3);                          // ease-out
-          monZoom=6+(1-6)*e;                                            // honeycomb (6) -> whole cell (1)
-          const zs=document.getElementById('cellZoom'); if(zs) zs.value=monZoom.toFixed(2);
-          if(_monAnim.t>=1) _monAnim=null; }
-        _monPrevCell=_cellOn;
         if(_cellOn){ const sc=_inVR?2.5:1.0, tilt=_inVR?0:-0.42, zp=CELL.center.z+(_inVR?-0.8:0);
           cellSurf.scale.setScalar(sc); cellSurf.position.set(CELL.center.x,CELL.center.y,zp); cellSurf.rotation.set(tilt,0,0);
           vesGroup.scale.setScalar(sc); vesGroup.position.set(CELL.center.x,CELL.center.y,zp); vesGroup.rotation.set(tilt,0,0);
