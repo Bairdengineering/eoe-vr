@@ -241,6 +241,8 @@
     <button id="cellNew" style="margin-top:8px;background:rgba(74,144,212,0.12);color:#cdd9ef;">Reseed</button>
     <button id="cellView" style="margin-top:8px;background:rgba(126,178,127,0.14);color:#cdd9ef;">View: closures</button>
     <div style="margin-top:10px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">monitor zoom</span><input id="cellZoom" type="range" min="1" max="6" step="0.1" value="1" style="flex:1;accent-color:#ecb74e;"></div>
+    <div style="margin-top:6px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">cell size</span><input id="cellRecFreq" type="range" min="12" max="64" step="0.5" value="30" style="flex:1;accent-color:#ecb74e;"></div>
+    <div style="margin-top:6px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">detail</span><input id="cellColAmp" type="range" min="0" max="1.1" step="0.02" value="0.6" style="flex:1;accent-color:#ecb74e;"></div>
     <div style="margin-top:10px;border-top:1px solid rgba(120,140,180,0.18);padding-top:8px;">
       <div style="color:#9fb3d6;font-size:11px;margin-bottom:6px;">machinery — the battery holds the genome</div>
       <canvas id="machHud" width="214" height="100" style="width:100%;display:block;border-radius:8px;"></canvas>
@@ -1870,6 +1872,10 @@
       const mat=makeMembraneMat();
       const skin=new THREE.Mesh(_memGeo, mat);
       g.userData.mat=mat; g.add(skin); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
+    // live surface-detail tuning (desktop slider + VR panel track both drive these)
+    let recFreqVal=30.0, colAmpVal=0.6;
+    function setRecFreq(v){ recFreqVal=Math.max(12,Math.min(64,v)); for(const g of vesPool){ const m=g.userData.mat; if(m&&m.uniforms.uRecFreq) m.uniforms.uRecFreq.value=recFreqVal; } }
+    function setColAmp(v){ colAmpVal=Math.max(0.0,Math.min(1.2,v)); for(const g of vesPool){ const m=g.userData.mat; if(m&&m.uniforms.uColAmp) m.uniforms.uColAmp.value=colAmpVal; } }
     const _vseen=new Uint8Array(AQ.N*AQ.N); let _lastComps=[];
     function extractClosures(){ const N=AQ.N, n=N*N, thr=0.24, minA=5; _vseen.fill(0); const comps=[], st=[];
       for(let s0=0;s0<n;s0++){ if(Pfield[s0]>thr && !_vseen[s0]){ let a=0,sx=0,sy=0,sxx=0,syy=0,sxy=0; st.length=0; st.push(s0); _vseen[s0]=1;
@@ -2088,7 +2094,7 @@
         aqCond={ feed:Math.max(0.006,Math.min(0.052,feed)), kill:Math.max(0.052,Math.min(0.069,kill)), key:'custom' }; aqSeed(); _aqState='forming'; _aqPrevCov=0; cellState.fed=true; refreshCellBtns(); drawChart(); drawCellInfo(); });
       const eb=document.getElementById('machEditor'); if(eb) eb.addEventListener('click',()=>{ MACH.editor=!MACH.editor; eb.textContent='Editor: '+(MACH.editor?'on':'off'); eb.classList.toggle('on',MACH.editor); });
       const sxb=document.getElementById('machSex'); if(sxb) sxb.addEventListener('click',()=>{ MACH.sex=!MACH.sex; sxb.textContent='Sex: '+(MACH.sex?'on':'off'); sxb.classList.toggle('on',MACH.sex); });
-      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; }; window.__reliefZ=()=>{ cellSurf.visible=true; updateCellRelief(); const z=_surfGeo.attributes.position.getZ((AQ.N*AQ.N/2)|0); cellSurf.visible=false; return z; }; window.__reliefMax=()=>{ cellSurf.visible=true; updateCellRelief(); const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } cellSurf.visible=false; return mx; }; window.__surfState=()=>{ const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } return {vis:cellSurf.visible, scale:cellSurf.scale.x, tilt:cellSurf.rotation.x, maxz:mx, fieldPlaneVis:fieldPlane.visible}; }; { const vb=document.getElementById('cellView'); if(vb) vb.addEventListener('click',()=>{ cellView=(cellView==='closures')?'surface':'closures'; vb.textContent='View: '+(cellView==='closures'?'closures':'field surface'); }); } window.__setView=(v)=>{cellView=v;}; window.__vesCount=()=>vesPool.filter(g=>g.visible).length; window.__closures=()=>extractClosures().length; window.__vesActive=()=>vesPool.filter(g=>g.userData.on).length; window.__vesAspect=()=>{ let mx=1; for(const g of vesPool){ if(g.visible&&g.scale.y>1e-4){ const r=g.scale.x/g.scale.y; if(r>mx)mx=r; } } return mx; }; { const zs=document.getElementById('cellZoom'); if(zs) zs.addEventListener('input',()=>{ _monAnim=null; monZoom=parseFloat(zs.value); }); } window.__monState=()=>({vis:fieldMon.visible, zoom:monZoom});
+      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; }; window.__reliefZ=()=>{ cellSurf.visible=true; updateCellRelief(); const z=_surfGeo.attributes.position.getZ((AQ.N*AQ.N/2)|0); cellSurf.visible=false; return z; }; window.__reliefMax=()=>{ cellSurf.visible=true; updateCellRelief(); const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } cellSurf.visible=false; return mx; }; window.__surfState=()=>{ const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } return {vis:cellSurf.visible, scale:cellSurf.scale.x, tilt:cellSurf.rotation.x, maxz:mx, fieldPlaneVis:fieldPlane.visible}; }; { const vb=document.getElementById('cellView'); if(vb) vb.addEventListener('click',()=>{ cellView=(cellView==='closures')?'surface':'closures'; vb.textContent='View: '+(cellView==='closures'?'closures':'field surface'); }); } window.__setView=(v)=>{cellView=v;}; window.__vesCount=()=>vesPool.filter(g=>g.visible).length; window.__closures=()=>extractClosures().length; window.__vesActive=()=>vesPool.filter(g=>g.userData.on).length; window.__vesAspect=()=>{ let mx=1; for(const g of vesPool){ if(g.visible&&g.scale.y>1e-4){ const r=g.scale.x/g.scale.y; if(r>mx)mx=r; } } return mx; }; { const zs=document.getElementById('cellZoom'); if(zs) zs.addEventListener('input',()=>{ _monAnim=null; monZoom=parseFloat(zs.value); }); } { const rf=document.getElementById('cellRecFreq'); if(rf) rf.addEventListener('input',()=>setRecFreq(parseFloat(rf.value))); const ca=document.getElementById('cellColAmp'); if(ca) ca.addEventListener('input',()=>setColAmp(parseFloat(ca.value))); } window.__monState=()=>({vis:fieldMon.visible, zoom:monZoom});
       refreshCellBtns(); drawChart(); }
     buildCellPanel();
 
@@ -2097,7 +2103,8 @@
     const ctrlTex=new THREE.CanvasTexture(ctrlCanvas);
     const ctrlPanel=new THREE.Mesh(new THREE.PlaneGeometry(0.66,0.66*760/720), new THREE.MeshBasicMaterial({map:ctrlTex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     ctrlPanel.renderOrder=20; ctrlPanel.visible=false; scene.add(ctrlPanel);
-    let ctrlButtons=[]; let ctrlHover=null;
+    let ctrlButtons=[]; let ctrlHover=null; let ctrlRecSliderRect=null;
+    let cellOrbitYaw=0, cellDist=0;   // VR turntable: orbit + distance of the cell (you stay put)
     let benchScrollY=0, benchContentH=760, ctrlSaveMsg='', ctrlView='bench';   // VR bench panel scroll + save flash + sub-view
     function cpBtn(x,y,w,h,label,id,on,fn,kind){
       const hov=(ctrlHover===id);
@@ -2225,7 +2232,13 @@
         cpBtn(40,616,300,48,'View: '+(cellView==='closures'?'closures':'field'),'cellview',false,()=>{ cellView=(cellView==='closures')?'surface':'closures'; drawCtrl(); });
         cpBtn(356,616,150,48,'zoom -','zoomout',false,()=>{ _monAnim=null; monZoom=Math.min(6,monZoom+0.6); drawCtrl(); });
         cpBtn(522,616,158,48,'zoom +','zoomin',false,()=>{ _monAnim=null; monZoom=Math.max(1,monZoom-0.6); drawCtrl(); });
-        cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText('Point a controller here · trigger to select',40,690);
+        { const sx=170, sy=684, sw=510, sh=14; const fr=(recFreqVal-12)/(64-12);
+          cpx.fillStyle='#9fb3d6'; cpx.font='300 20px system-ui, sans-serif'; cpx.fillText('cell size',40,sy+14);
+          cpx.fillStyle='#1a2236'; rrect(cpx,sx,sy,sw,sh,7); cpx.fill();
+          cpx.fillStyle='#d4a049'; rrect(cpx,sx,sy,sw*fr,sh,7); cpx.fill();
+          cpx.fillStyle='#ffe2a6'; cpx.beginPath(); cpx.arc(sx+sw*fr,sy+sh/2,12,0,7); cpx.fill();
+          ctrlRecSliderRect=[sx-8,sy-14,sw+16,sh+28]; }
+        cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText('Point here · trigger to select · hold + drag the slider',40,728);
       }
       ctrlTex.needsUpdate=true; }
 
@@ -2236,7 +2249,15 @@
       if(!bench){ eqPlane.visible=false; const hs=document.getElementById('hintStrip'); if(hs) hs.classList.remove('show'); }
       cellGroup.visible=cell; cellInfo.visible=cell;
       const cpan=document.getElementById('cellPanel'); if(cpan) cpan.classList.toggle('show', cell && !renderer.xr.isPresenting);
-      if(cell){ cellReset(); }
+      if(cell){ cellReset(); cellOrbitYaw=0; cellDist=0;
+        if(renderer.xr.isPresenting){   // snap the play-space yaw so the cell is in front of where you're looking
+          const xrCam=(renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
+          const _hp=new THREE.Vector3(); xrCam.getWorldPosition(_hp);
+          const _hf=new THREE.Vector3(); xrCam.getWorldDirection(_hf); _hf.y=0;
+          const _tc=new THREE.Vector3(CELL.center.x-_hp.x,0,CELL.center.z-_hp.z);
+          if(_hf.lengthSq()>1e-6 && _tc.lengthSq()>1e-6){
+            const cur=Math.atan2(_hf.x,_hf.z), tgt=Math.atan2(_tc.x,_tc.z);
+            let d=tgt-cur; d-=Math.PI*2*Math.round(d/(Math.PI*2)); rig.rotation.y+=d; } } }
       const mp=document.getElementById('molPicker'); if(mp) mp.classList.toggle('show', mol && !renderer.xr.isPresenting); molShelf.visible = mol && renderer.xr.isPresenting;
       const bp=document.getElementById('benchPanel'); if(bp) bp.classList.toggle('show', bench && !renderer.xr.isPresenting);
       const bdom=document.getElementById('benchDom'); if(bdom) bdom.classList.toggle('show', bench && !renderer.xr.isPresenting);
@@ -2354,9 +2375,9 @@
       { const _cellOn=(mode==='cell'); const _inVR=renderer.xr.isPresenting; const _surf=(cellView==='surface');
         cellSurf.visible=_cellOn&&_surf; vesGroup.visible=_cellOn&&!_surf; fieldPlane.visible=false; aqFrame.visible=false; aqGlow.visible=false;
         fieldMon.visible=_cellOn;
-        if(_cellOn){ const sc=_inVR?2.5:1.0, tilt=_inVR?0:-0.42, zp=CELL.center.z+(_inVR?-0.8:0);
-          cellSurf.scale.setScalar(sc); cellSurf.position.set(CELL.center.x,CELL.center.y,zp); cellSurf.rotation.set(tilt,0,0);
-          vesGroup.scale.setScalar(sc); vesGroup.position.set(CELL.center.x,CELL.center.y,zp); vesGroup.rotation.set(tilt,0,0);
+        if(_cellOn){ const sc=_inVR?2.5:1.0, tilt=_inVR?0:-0.42, zp=CELL.center.z+(_inVR?-0.8:0)-(_inVR?cellDist:0), yaw=_inVR?cellOrbitYaw:0;
+          cellSurf.scale.setScalar(sc); cellSurf.position.set(CELL.center.x,CELL.center.y,zp); cellSurf.rotation.set(tilt,yaw,0);
+          vesGroup.scale.setScalar(sc); vesGroup.position.set(CELL.center.x,CELL.center.y,zp); vesGroup.rotation.set(tilt,yaw,0);
           const ms=_inVR?1.7:0.95; fieldMon.scale.set(ms,ms,1);
           fieldMon.position.set(CELL.center.x-(_inVR?3.2:1.6), CELL.center.y+(_inVR?0.3:0.1), CELL.center.z+(_inVR?-0.2:0.4)); } }
       if(renderer.xr.isPresenting && xrSession){
@@ -2412,6 +2433,9 @@
           if(mode==='bench'||mode==='cell'){ poseOf(c,_o,_d); ray.set(_o,_d.clone().normalize()); const ch=ray.intersectObject(ctrlPanel,false);
             if(ch.length&&ch[0].uv){ menuCursor.position.copy(ch[0].point); menuCursor.visible=true;
               const px=ch[0].uv.x*720, py=(1-ch[0].uv.y)*760; let hit=null;
+              if(mode==='cell' && ctrlRecSliderRect && trig && inRect(px,py,ctrlRecSliderRect)){
+                const fr=Math.max(0,Math.min(1,(px-ctrlRecSliderRect[0]-8)/(ctrlRecSliderRect[2]-16)));
+                setRecFreq(12+fr*(64-12)); drawCtrl(); ud.trigPrev=trig; ud.gripPrev=grip; continue; }
               for(const b of ctrlButtons){ if(inRect(px,py,b.r)){ hit=b; break; } }
               const hid=hit?hit.id:null; if(hid!==ctrlHover){ ctrlHover=hid; drawCtrl(); }
               if(trig&&!ud.trigPrev&&hit){ if(hit.id==='chart'){ const cr=hit.r; const kill=0.055+((px-cr[0])/cr[2])*0.013, feed=0.008+((cr[1]+cr[3]-py)/cr[3])*0.040; aqCond={feed:Math.max(0.006,Math.min(0.052,feed)),kill:Math.max(0.052,Math.min(0.069,kill)),key:'custom'}; aqSeed(); _aqState='forming'; _aqPrevCov=0; cellState.fed=true; refreshCellBtns(); drawChart(); drawCellInfo(); drawCtrl(); } else { hit.fn(); } }
@@ -2430,19 +2454,17 @@
         }
       }
 
-      // VR: thumbstick glides you nearer / farther in the cell view, so you don't have to physically walk back
+      // VR turntable: left/right thumbstick = orbit the cell, up/down = move it nearer / farther.
+      // You stay put, so the menu stays right where it is and reachable.
       if(renderer.xr.isPresenting && xrSession && mode==='cell' && !menuVisible){
-        let ay=0; const lsrcs=xrSession.inputSources;
+        let ax=0, ay=0; const lsrcs=xrSession.inputSources;
         for(let si=0;si<lsrcs.length;si++){ const gp=lsrcs[si]&&lsrcs[si].gamepad; if(!gp||!gp.axes) continue;
-          const a=(gp.axes.length>=4)?gp.axes[3]:(gp.axes.length>=2?gp.axes[1]:0);
-          if(Math.abs(a)>Math.abs(ay)) ay=a; }
-        if(Math.abs(ay)>0.15){
-          const xrCam=(renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
-          xrCam.getWorldDirection(_d); _d.y=0;
-          if(_d.lengthSq()>1e-6){ _d.normalize();
-            rig.position.addScaledVector(_d, -ay*2.6*dt);                 // push stick forward = toward the cell; pull back = glide away
-            const hd=Math.hypot(rig.position.x, rig.position.z), maxR=7.0;
-            if(hd>maxR){ const sc=maxR/hd; rig.position.x*=sc; rig.position.z*=sc; } } }
+          const aX=(gp.axes.length>=4)?gp.axes[2]:(gp.axes.length>=2?gp.axes[0]:0);
+          const aY=(gp.axes.length>=4)?gp.axes[3]:(gp.axes.length>=2?gp.axes[1]:0);
+          if(Math.abs(aX)>Math.abs(ax)) ax=aX;
+          if(Math.abs(aY)>Math.abs(ay)) ay=aY; }
+        if(Math.abs(ax)>0.15) cellOrbitYaw += (Math.abs(ax)-0.15)*(ax<0?-1.0:1.0)*1.7*dt;
+        if(Math.abs(ay)>0.15) cellDist = Math.max(-1.1, Math.min(2.6, cellDist + (Math.abs(ay)-0.15)*(ay<0?-1.0:1.0)*1.9*dt));  // pull back = farther
       }
 
       if(mode==='table' && !renderer.xr.isPresenting){ let hz=0; tblHoverBtn=null;
