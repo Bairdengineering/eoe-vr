@@ -1820,7 +1820,7 @@
         vFuv=fuv;
         float h0=sm(fuv);                               // de-blocked base honeycomb
         vec2 s=vec2(ph*0.15915494, rho);                // surface coords for the self-similar octaves
-        float tex=0.5*smT(s*4.0+0.17)+0.25*smT(s*8.0+0.53);  // SAME honeycomb at smaller & smaller scale = the texture
+        float tex=0.5*smT(s*4.0+0.17)+0.25*smT(s*8.0+0.53)+0.125*smT(s*16.0+0.81);  // SAME honeycomb at smaller & smaller scale = the texture
         vVN=normalize(normalMatrix*normal);
         vec3 p=position+normal*(h0*uDisp + tex*uTex);
         vec4 mv=modelViewMatrix*vec4(p,1.0); vVP=mv.xyz;
