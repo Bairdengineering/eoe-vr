@@ -1809,7 +1809,7 @@
       const skin=new THREE.Mesh(new THREE.SphereGeometry(1,18,14), new THREE.MeshBasicMaterial({color:0xecb74e,transparent:true,opacity:0.14,blending:THREE.AdditiveBlending,depthWrite:false}));
       const lat=new THREE.Mesh(new THREE.SphereGeometry(1,14,10), new THREE.MeshBasicMaterial({color:0xe8c46a,wireframe:true,transparent:true,opacity:0.30,blending:THREE.AdditiveBlending,depthWrite:false}));
       g.add(skin,lat); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
-    const _vseen=new Uint8Array(AQ.N*AQ.N);
+    const _vseen=new Uint8Array(AQ.N*AQ.N); let _lastComps=[];
     function extractClosures(){ const N=AQ.N, n=N*N, thr=0.24, minA=5; _vseen.fill(0); const comps=[], st=[];
       for(let s0=0;s0<n;s0++){ if(Pfield[s0]>thr && !_vseen[s0]){ let a=0,sx=0,sy=0,sxx=0,syy=0,sxy=0; st.length=0; st.push(s0); _vseen[s0]=1;
         while(st.length){ const id=st.pop(), x=id%N, y=(id/N)|0; a++; sx+=x; sy+=y; sxx+=x*x; syy+=y*y; sxy+=x*y;
@@ -1818,7 +1818,7 @@
         if(a>=minA){ const cx=sx/a, cy=sy/a, Cxx=sxx/a-cx*cx, Cyy=syy/a-cy*cy, Cxy=sxy/a-cx*cy;   // shape: principal axes of the blob
           const tr=(Cxx+Cyy)/2, df=Math.sqrt(Math.max(0,((Cxx-Cyy)/2)*((Cxx-Cyy)/2)+Cxy*Cxy)), th=0.5*Math.atan2(2*Cxy, Cxx-Cyy);
           comps.push({cx:cx, cy:cy, r:Math.sqrt(a/Math.PI), a:a, s1:Math.sqrt(Math.max(tr+df,0.25)), s2:Math.sqrt(Math.max(tr-df,0.25)), th:th}); } } }
-      comps.sort((p,q)=>q.a-p.a); return comps; }
+      comps.sort((p,q)=>q.a-p.a); _lastComps=comps; return comps; }
     const _MATCH_FRAC=0.16, _MISS_MAX=8;   // identity tracking: each vesicle follows ITS blob
     function updateClosures(){ const N=AQ.N, comps=extractClosures(), S=AQ.size; const MD2=(N*_MATCH_FRAC)*(N*_MATCH_FRAC);
       for(const g of vesPool){ if(g.userData.cx===undefined){ g.userData.on=false; g.userData.cx=0; g.userData.cy=0; g.userData.miss=0; } }
@@ -1844,11 +1844,17 @@
     const monTex=new THREE.CanvasTexture(monCanvas); monTex.minFilter=THREE.LinearFilter; monTex.magFilter=THREE.LinearFilter;
     const fieldMon=new THREE.Sprite(new THREE.SpriteMaterial({map:monTex,transparent:true,depthWrite:false}));
     fieldMon.visible=false; cellGroup.add(fieldMon);
-    function drawMonitor(){ const N=AQ.N, src=Math.max(8,N/monZoom), o=(N-src)/2;
+    function drawMonitor(){ const N=AQ.N; const c=(_lastComps&&_lastComps.length)?_lastComps[0]:null;
+      const base=c?Math.min(N,Math.max(16,4.0*c.r)):N;        // monZoom=1 frames the whole cell; higher dives into its membrane
+      const src=Math.max(8, base/monZoom);
+      const cx=c?c.cx:N/2, cy=c?c.cy:N/2;
+      const ox=Math.max(0,Math.min(N-src, cx-src/2)), oy=Math.max(0,Math.min(N-src, cy-src/2));
       monCtx.fillStyle='#06080e'; monCtx.fillRect(0,0,256,256);
-      monCtx.drawImage(fieldCanvas, o,o,src,src, 0,0,256,256);
+      monCtx.drawImage(fieldCanvas, ox,oy,src,src, 0,0,256,256);
+      if(c){ const sc=256/src, mx=(c.cx-ox)*sc, my=(c.cy-oy)*sc, ea=Math.max(2,2.0*c.s1*sc), eb=Math.max(2,2.0*c.s2*sc);
+        monCtx.strokeStyle='rgba(232,196,106,0.9)'; monCtx.lineWidth=2.5; monCtx.beginPath(); monCtx.ellipse(mx,my,ea,eb,c.th,0,6.28318); monCtx.stroke(); }
       monCtx.strokeStyle='rgba(212,160,73,0.6)'; monCtx.lineWidth=4; monCtx.strokeRect(2,2,252,252);
-      monCtx.fillStyle='rgba(159,179,214,0.8)'; monCtx.font='15px system-ui,sans-serif'; monCtx.fillText('field \u00d7'+monZoom.toFixed(1),10,22);
+      monCtx.fillStyle='rgba(159,179,214,0.85)'; monCtx.font='15px system-ui,sans-serif'; monCtx.fillText((c?'the cell':'field')+' ×'+monZoom.toFixed(1),10,22);
       monTex.needsUpdate=true; }
 
     const CIW=820,CIH=560; const ccv=document.createElement('canvas'); ccv.width=CIW; ccv.height=CIH; const cctx=ccv.getContext('2d');
