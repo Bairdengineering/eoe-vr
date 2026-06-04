@@ -1805,27 +1805,36 @@
     let cellView='closures';
     const vesGroup=new THREE.Group(); vesGroup.position.copy(CELL.center); cellGroup.add(vesGroup);
     const vesPool=[];
-    // 3D honeycomb membrane: a sphere whose surface is pushed out along the live field ridges (like the
-    // field-surface relief, wrapped onto the cell). Each cell samples its own patch of the field.
-    const _memVert=`uniform sampler2D uField; uniform vec2 uOff; uniform vec2 uRep; uniform float uDisp;
-      varying float vH; varying vec3 vNrm;
-      void main(){ vec2 fuv=uv*uRep+uOff; float h=texture2D(uField,fuv).a; vH=h;
-        vNrm=normalize(mat3(modelMatrix)*normal);
+    // 3D honeycomb membrane: a sphere whose surface is pushed out along the live field ridges.
+    // The framework is circular, so the field is wrapped onto the cell RADIALLY about its centre
+    // (azimuthal projection) rather than stamped on as a flat x/y sheet -> congruent and pole-pinch free.
+    const _memVert=`uniform sampler2D uField; uniform vec2 uCenter; uniform float uW; uniform float uDisp;
+      varying float vH; varying vec3 vVN; varying vec3 vVP;
+      void main(){
+        float th=acos(clamp(position.z,-1.0,1.0));   // polar angle from the cell's central axis (cell centre = pole)
+        float ph=atan(position.y,position.x);          // true circular angle
+        float rho=th/3.14159265;                        // radial: linear in angle, so the field wraps the cell radially (no x/y grid stamp)
+        vec2 fuv=uCenter+vec2(cos(ph),sin(ph))*(rho*uW);
+        float h=texture2D(uField,fuv).a; vH=h;
+        vVN=normalize(normalMatrix*normal);
         vec3 p=position+normal*(h*uDisp);
-        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); }`;
-    const _memFrag=`varying float vH; varying vec3 vNrm;
-      void main(){ float lit=0.5+0.5*clamp(dot(vNrm,normalize(vec3(0.35,0.55,0.75))),0.0,1.0);
-        vec3 lo=vec3(0.05,0.035,0.025), hi=vec3(0.97,0.74,0.32);
-        vec3 col=mix(lo,hi,clamp(vH*1.3,0.0,1.0))*(0.45+0.75*lit);
+        vec4 mv=modelViewMatrix*vec4(p,1.0); vVP=mv.xyz;
+        gl_Position=projectionMatrix*mv; }`;
+    const _memFrag=`varying float vH; varying vec3 vVN; varying vec3 vVP;
+      void main(){ vec3 N=normalize(vVN), V=normalize(-vVP);
+        float lit=0.45+0.55*clamp(dot(N,normalize(vec3(0.3,0.5,0.8))),0.0,1.0);
+        float fres=pow(1.0-clamp(dot(N,V),0.0,1.0),2.2);
+        vec3 lo=vec3(0.05,0.035,0.025), hi=vec3(0.98,0.75,0.33);
+        vec3 col=mix(lo,hi,clamp(vH*1.3,0.0,1.0))*(0.4+0.8*lit);
+        col+=vec3(0.95,0.78,0.45)*fres*0.55;
         gl_FragColor=vec4(col,1.0); }`;
     function makeMembraneMat(){ return new THREE.ShaderMaterial({
-      uniforms:{ uField:{value:fieldTex}, uOff:{value:new THREE.Vector2(0,0)}, uRep:{value:new THREE.Vector2(1,1)}, uDisp:{value:0.34} },
+      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.24} },
       vertexShader:_memVert, fragmentShader:_memFrag, side:THREE.FrontSide }); }
     for(let i=0;i<48;i++){ const g=new THREE.Group();
       const mat=makeMembraneMat();
-      const skin=new THREE.Mesh(new THREE.SphereGeometry(1,48,32), mat);
-      const lat=new THREE.Mesh(new THREE.SphereGeometry(1.36,20,15), new THREE.MeshBasicMaterial({color:0xe8c46a,wireframe:true,transparent:true,opacity:0.16,blending:THREE.AdditiveBlending,depthWrite:false}));
-      g.userData.mat=mat; g.add(skin,lat); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
+      const skin=new THREE.Mesh(new THREE.SphereGeometry(1,56,40), mat);
+      g.userData.mat=mat; g.add(skin); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
     const _vseen=new Uint8Array(AQ.N*AQ.N); let _lastComps=[];
     function extractClosures(){ const N=AQ.N, n=N*N, thr=0.24, minA=5; _vseen.fill(0); const comps=[], st=[];
       for(let s0=0;s0<n;s0++){ if(Pfield[s0]>thr && !_vseen[s0]){ let a=0,sx=0,sy=0,sxx=0,syy=0,sxy=0; st.length=0; st.push(s0); _vseen[s0]=1;
@@ -1853,13 +1862,13 @@
         // and ignore the noisy angle of a near-round blob so a forming cell grows smoothly instead of flipping.
         const _elong=c.s1/Math.max(c.s2,1e-3);
         if(_elong>1.15){ let d=(-c.th)-g.rotation.z; d-=Math.PI*Math.round(d/Math.PI); g.rotation.z+=d*0.22; }
-        const _ut=g.userData.mat; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.uniforms.uRep.value.set((2*w)/N,(2*w)/N); _ut.uniforms.uOff.value.set((c.cx-w)/N,1-(c.cy+w)/N); } }
+        const _ut=g.userData.mat; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.uniforms.uW.value=w/N; _ut.uniforms.uCenter.value.set(c.cx/N,1-c.cy/N); } }
       for(let vi=0;vi<active.length;vi++){ if(vUsed[vi]) continue; const u=active[vi].userData; u.miss++; if(u.miss>_MISS_MAX) u.on=false; }   // its blob vanished: hold a few frames, then let it go
       for(let ci=0;ci<comps.length;ci++){ if(claimed[ci]) continue; const c=comps[ci];   // an unmatched blob is a birth — a fresh vesicle appears where it split
         let g=null; for(const v of vesPool){ if(!v.userData.on){ g=v; break; } } if(!g) continue;
         g.userData.on=true; g.userData.cx=c.cx; g.userData.cy=c.cy; g.userData.miss=0;
         g.visible=true; g.position.set((c.cx/N-0.5)*S,(0.5-c.cy/N)*S,0); g.scale.set(0.02,0.02,0.02); g.rotation.z=(c.s1/Math.max(c.s2,1e-3)>1.15)?-c.th:0;
-        { const _ut=g.userData.mat; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.uniforms.uRep.value.set((2*w)/N,(2*w)/N); _ut.uniforms.uOff.value.set((c.cx-w)/N,1-(c.cy+w)/N); } } }
+        { const _ut=g.userData.mat; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.uniforms.uW.value=w/N; _ut.uniforms.uCenter.value.set(c.cx/N,1-c.cy/N); } } }
       for(const g of vesPool){ if(!g.userData.on){ g.scale.multiplyScalar(0.82); if(g.scale.x<0.01) g.visible=false; } } }
     // side monitor: the flat field, zoomable — the close-up detail kept beside the big closures
     let monZoom=1;                 // start on the membrane honeycomb; drag right to pull out to the whole cell
