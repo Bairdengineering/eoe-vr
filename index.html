@@ -98,12 +98,15 @@ const NB=Int32Array.from(nbrFlat);
 const U=new Float32Array(n), Vv=new Float32Array(n), U2=new Float32Array(n), V2=new Float32Array(n);
 const aField=new Float32Array(n);   // what the shader reads (the V / order field)
 let FEED=0.037, KILL=0.060, RATE=12, DISP=0.55;
-const Du=0.16, Dv=0.08, DT=1.0;
+const Du=0.5, Dv=0.25, DT=1.0;   // tuned for the geodesic neighbour-average Laplacian (the old 0.16/0.08 were for a grid kernel and far too weak here)
 
 function reseed(){
   U.fill(1.0); Vv.fill(0.0);
-  for(let s=0;s<60;s++){ const i=(Math.random()*n)|0; Vv[i]=0.55; U[i]=0.25;
-    for(let k=nbrStart[i];k<nbrStart[i+1];k++){ const j=NB[k]; Vv[j]=0.5; U[j]=0.3; } }
+  for(let s=0;s<24;s++){                 // 24 blobs, each grown out two neighbour-rings, classic U=0.5 / V=0.28 ignition
+    const c=(Math.random()*n)|0; const ring=new Set([c]);
+    for(let r=0;r<2;r++){ const cur=Array.from(ring); for(const x of cur){ for(let k=nbrStart[x];k<nbrStart[x+1];k++) ring.add(NB[k]); } }
+    for(const j of ring){ Vv[j]=0.28; U[j]=0.5; }
+  }
 }
 reseed();
 
@@ -116,8 +119,8 @@ function stepRD(){
       const u=U[i], v=Vv[i];
       const lapU=su/d-u, lapV=sv/d-v;
       const uvv=u*v*v;
-      U2[i]=u+(Du*lapU - uvv + FEED*(1.0-u))*DT;
-      V2[i]=v+(Dv*lapV + uvv - lam*v)*DT;
+      U2[i]=Math.min(1.2,Math.max(0.0, u+(Du*lapU - uvv + FEED*(1.0-u))*DT));
+      V2[i]=Math.min(1.2,Math.max(0.0, v+(Dv*lapV + uvv - lam*v)*DT));
     }
     U.set(U2); Vv.set(V2);
   }
