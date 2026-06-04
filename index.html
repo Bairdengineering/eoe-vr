@@ -1831,7 +1831,7 @@
         vec3 p=position+lp*H;
         vec4 mv=modelViewMatrix*vec4(p,1.0); vVP=mv.xyz;
         gl_Position=projectionMatrix*mv; }`;
-    const _memFrag=`uniform sampler2D uField; uniform float uChi; uniform float uLam; uniform float uN; uniform float uRelief; uniform float uLodBias;
+    const _memFrag=`uniform sampler2D uField; uniform float uChi; uniform float uLam; uniform float uN; uniform float uRelief; uniform float uColAmp; uniform float uLodBias;
       varying vec2 vFuv; varying vec3 vN; varying vec3 vVP; varying vec3 vLP;
       float sm(vec2 uv){ vec2 p=uv*uN+0.5; vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); return texture2D(uField,(i+f-0.5)/uN).a; }
       float smT(vec2 uv){ vec2 m=abs(fract(uv*0.5)*2.0-1.0); return sm(m); }
@@ -1844,15 +1844,15 @@
         // Closer -> more octaves of the SAME honeycomb fade in. Only computed for visible pixels.
         float px=max(fwidth(vFuv.x), fwidth(vFuv.y))+1e-7;
         float lod=clamp(-log2(px)-uLodBias, 0.0, 6.0);
-        float fineH=0.0, amp=1.0, freq=4.0;
+        float rec=0.0, amp=1.0, freq=4.0;
         for(int k=0;k<6;k++){
           float w=clamp(lod-float(k),0.0,1.0);
-          fineH += amp*w*(smT(s*freq + float(k)*vec2(0.37,0.19)) - 0.5);
+          rec += amp*w*(smT(s*freq + float(k)*vec2(0.37,0.19)) - 0.5);
           amp*=0.6; freq*=2.0; }
-        fineH*=uRelief;
-        vec3 Nb=normalize(normalize(vN) - vec3(dFdx(fineH), dFdy(fineH), 0.0));   // fine detail rides the smooth coarse normal
+        float bumpH=rec*uRelief;
+        vec3 Nb=normalize(normalize(vN) - vec3(dFdx(bumpH), dFdy(bumpH), 0.0));   // fine relief rides the smooth coarse normal
         vec3 V=normalize(-vVP);
-        float h=sm(vFuv);                                                               // colour from base order, per-pixel
+        float h=clamp(sm(vFuv) + rec*uColAmp, 0.0, 1.0);                              // the honeycomb ORDER recurses too -> the pattern (colour) sharpens as you zoom
         float lit=0.4+0.6*clamp(dot(Nb,normalize(vec3(0.35,0.5,0.78))),0.0,1.0);
         float fres=pow(1.0-clamp(dot(Nb,V),0.0,1.0),2.2);
         float M=uChi*h-uLam; float Mn=clamp((M+0.5)*0.5,0.0,1.0);                        // colour IS the engine quantity M = chi*s - lambda
@@ -1860,7 +1860,7 @@
         vec3 col=ramp*(0.32+0.9*lit)+ramp*fres*0.5;
         gl_FragColor=vec4(col,1.0); }`;
     function makeMembraneMat(){ return new THREE.ShaderMaterial({
-      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uRelief:{value:0.5}, uLodBias:{value:8.0}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
+      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uRelief:{value:0.5}, uColAmp:{value:0.5}, uLodBias:{value:8.0}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
       extensions:{derivatives:true},
       vertexShader:_memVert, fragmentShader:_memFrag, side:THREE.FrontSide }); }
     const _memGeo=new THREE.SphereGeometry(1,256,192);   // one shared high-res sphere -> facets vanish, cheap (geometry reused by all cells)
