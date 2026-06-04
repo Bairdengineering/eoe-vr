@@ -2250,15 +2250,7 @@
       if(!bench){ eqPlane.visible=false; const hs=document.getElementById('hintStrip'); if(hs) hs.classList.remove('show'); }
       cellGroup.visible=cell; cellInfo.visible=cell;
       const cpan=document.getElementById('cellPanel'); if(cpan) cpan.classList.toggle('show', cell && !renderer.xr.isPresenting);
-      if(cell){ cellReset(); cellOrbitYaw=0; cellDist=0;
-        if(renderer.xr.isPresenting){   // snap the play-space yaw so the cell is in front of where you're looking
-          const xrCam=(renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
-          const _hp=new THREE.Vector3(); xrCam.getWorldPosition(_hp);
-          const _hf=new THREE.Vector3(); xrCam.getWorldDirection(_hf); _hf.y=0;
-          const _tc=new THREE.Vector3(CELL.center.x-_hp.x,0,CELL.center.z-_hp.z);
-          if(_hf.lengthSq()>1e-6 && _tc.lengthSq()>1e-6){
-            const cur=Math.atan2(_hf.x,_hf.z), tgt=Math.atan2(_tc.x,_tc.z);
-            let d=tgt-cur; d-=Math.PI*2*Math.round(d/(Math.PI*2)); rig.rotation.y+=d; } } }
+      if(cell){ cellReset(); cellOrbitYaw=0; cellDist=0; }
       const mp=document.getElementById('molPicker'); if(mp) mp.classList.toggle('show', mol && !renderer.xr.isPresenting); molShelf.visible = mol && renderer.xr.isPresenting;
       const bp=document.getElementById('benchPanel'); if(bp) bp.classList.toggle('show', bench && !renderer.xr.isPresenting);
       const bdom=document.getElementById('benchDom'); if(bdom) bdom.classList.toggle('show', bench && !renderer.xr.isPresenting);
