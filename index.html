@@ -124,7 +124,7 @@ function stepRD(){
     }
     U.set(U2); Vv.set(V2);
   }
-  for(let i=0;i<n;i++) aField[i]=Vv[i];
+  const fa=fieldAttr.array; for(let i=0;i<n;i++) fa[i]=Vv[i];   // write into the attribute's OWN buffer (it copied aField at construction)
   fieldAttr.needsUpdate=true;
 }
 
