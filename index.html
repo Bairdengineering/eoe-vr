@@ -1806,9 +1806,10 @@
     const vesGroup=new THREE.Group(); vesGroup.position.copy(CELL.center); cellGroup.add(vesGroup);
     const vesPool=[];
     for(let i=0;i<48;i++){ const g=new THREE.Group();
-      const skin=new THREE.Mesh(new THREE.SphereGeometry(1,18,14), new THREE.MeshBasicMaterial({color:0xecb74e,transparent:true,opacity:0.14,blending:THREE.AdditiveBlending,depthWrite:false}));
-      const lat=new THREE.Mesh(new THREE.SphereGeometry(1,14,10), new THREE.MeshBasicMaterial({color:0xe8c46a,wireframe:true,transparent:true,opacity:0.30,blending:THREE.AdditiveBlending,depthWrite:false}));
-      g.add(skin,lat); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
+      const ftex=new THREE.CanvasTexture(fieldCanvas); ftex.minFilter=THREE.LinearFilter; ftex.magFilter=THREE.LinearFilter; ftex.wrapS=ftex.wrapT=THREE.ClampToEdgeWrapping;
+      const skin=new THREE.Mesh(new THREE.SphereGeometry(1,30,22), new THREE.MeshBasicMaterial({map:ftex,color:0xffffff,transparent:true,opacity:0.92,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.FrontSide}));
+      const lat=new THREE.Mesh(new THREE.SphereGeometry(1.004,16,12), new THREE.MeshBasicMaterial({color:0xe8c46a,wireframe:true,transparent:true,opacity:0.12,blending:THREE.AdditiveBlending,depthWrite:false}));
+      g.userData.ftex=ftex; g.add(skin,lat); g.visible=false; g.scale.setScalar(0.001); vesGroup.add(g); vesPool.push(g); }
     const _vseen=new Uint8Array(AQ.N*AQ.N); let _lastComps=[];
     function extractClosures(){ const N=AQ.N, n=N*N, thr=0.24, minA=5; _vseen.fill(0); const comps=[], st=[];
       for(let s0=0;s0<n;s0++){ if(Pfield[s0]>thr && !_vseen[s0]){ let a=0,sx=0,sy=0,sxx=0,syy=0,sxy=0; st.length=0; st.push(s0); _vseen[s0]=1;
@@ -1835,12 +1836,14 @@
         // Chase the NEAREST equivalent angle so crossing vertical never triggers a 180 deg spin,
         // and ignore the noisy angle of a near-round blob so a forming cell grows smoothly instead of flipping.
         const _elong=c.s1/Math.max(c.s2,1e-3);
-        if(_elong>1.15){ let d=(-c.th)-g.rotation.z; d-=Math.PI*Math.round(d/Math.PI); g.rotation.z+=d*0.22; } }
+        if(_elong>1.15){ let d=(-c.th)-g.rotation.z; d-=Math.PI*Math.round(d/Math.PI); g.rotation.z+=d*0.22; }
+        const _ut=g.userData.ftex; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.repeat.set((2*w)/N,(2*w)/N); _ut.offset.set((c.cx-w)/N,1-(c.cy+w)/N); _ut.needsUpdate=true; } }
       for(let vi=0;vi<active.length;vi++){ if(vUsed[vi]) continue; const u=active[vi].userData; u.miss++; if(u.miss>_MISS_MAX) u.on=false; }   // its blob vanished: hold a few frames, then let it go
       for(let ci=0;ci<comps.length;ci++){ if(claimed[ci]) continue; const c=comps[ci];   // an unmatched blob is a birth — a fresh vesicle appears where it split
         let g=null; for(const v of vesPool){ if(!v.userData.on){ g=v; break; } } if(!g) continue;
         g.userData.on=true; g.userData.cx=c.cx; g.userData.cy=c.cy; g.userData.miss=0;
-        g.visible=true; g.position.set((c.cx/N-0.5)*S,(0.5-c.cy/N)*S,0); g.scale.set(0.02,0.02,0.02); g.rotation.z=(c.s1/Math.max(c.s2,1e-3)>1.15)?-c.th:0; }
+        g.visible=true; g.position.set((c.cx/N-0.5)*S,(0.5-c.cy/N)*S,0); g.scale.set(0.02,0.02,0.02); g.rotation.z=(c.s1/Math.max(c.s2,1e-3)>1.15)?-c.th:0;
+        { const _ut=g.userData.ftex; if(_ut){ const w=Math.max(6,1.7*c.r); _ut.repeat.set((2*w)/N,(2*w)/N); _ut.offset.set((c.cx-w)/N,1-(c.cy+w)/N); _ut.needsUpdate=true; } } }
       for(const g of vesPool){ if(!g.userData.on){ g.scale.multiplyScalar(0.82); if(g.scale.x<0.01) g.visible=false; } } }
     // side monitor: the flat field, zoomable — the close-up detail kept beside the big closures
     let monZoom=6;                 // start fully zoomed in on the membrane honeycomb
@@ -1859,25 +1862,8 @@
       const src = Math.max(8, Math.min(N, srcOut*Math.pow(srcIn/srcOut, tz)));
       const cx=c?c.cx:N/2, cy=c?c.cy:N/2;
       const ox=Math.max(0,Math.min(N-src, cx-src/2)), oy=Math.max(0,Math.min(N-src, cy-src/2));
-      const sc=256/src;
       monCtx.fillStyle='#06080e'; monCtx.fillRect(0,0,256,256);
-      // close-up membrane honeycomb — fully present zoomed in, fades away as we pull all the way out
-      const honeyA=Math.max(0,Math.min(1,(tz-0.05)/0.45));
-      if(honeyA>0.001){ monCtx.save(); monCtx.globalAlpha=honeyA; monCtx.drawImage(fieldCanvas, ox,oy,src,src, 0,0,256,256); monCtx.restore(); }
-      // pulled-out view: the cell drawn as the SAME gold wireframe shapes as the 3D holodeck (one per closure,
-      // so a round cell reads as a sphere and dividing daughters read as two blades, exactly like the 3D)
-      const wireA=1-honeyA; const comps=_lastComps||[];
-      if(wireA>0.001 && comps.length){ monCtx.save(); monCtx.globalAlpha=wireA;
-        for(let i=0;i<comps.length;i++){ const k=comps[i];
-          const mx=(k.cx-ox)*sc, my=(k.cy-oy)*sc, ea=Math.max(2,2.0*k.s1*sc), eb=Math.max(2,2.0*k.s2*sc);
-          monCtx.fillStyle='rgba(236,183,78,0.10)'; monCtx.beginPath(); monCtx.ellipse(mx,my,ea,eb,k.th,0,6.28318); monCtx.fill();
-          monCtx.strokeStyle='rgba(232,196,106,0.85)'; monCtx.lineWidth=1.5; monCtx.beginPath(); monCtx.ellipse(mx,my,ea,eb,k.th,0,6.28318); monCtx.stroke();
-          monCtx.strokeStyle='rgba(232,196,106,0.42)'; monCtx.lineWidth=1;
-          monCtx.beginPath(); monCtx.ellipse(mx,my,ea*0.62,eb,k.th,0,6.28318); monCtx.stroke();
-          monCtx.beginPath(); monCtx.ellipse(mx,my,ea,eb*0.62,k.th,0,6.28318); monCtx.stroke();
-          monCtx.beginPath(); monCtx.ellipse(mx,my,ea*0.28,eb,k.th,0,6.28318); monCtx.stroke();
-          monCtx.beginPath(); monCtx.ellipse(mx,my,ea,eb*0.28,k.th,0,6.28318); monCtx.stroke(); }
-        monCtx.restore(); }
+      monCtx.drawImage(fieldCanvas, ox,oy,src,src, 0,0,256,256);
       monCtx.strokeStyle='rgba(212,160,73,0.6)'; monCtx.lineWidth=4; monCtx.strokeRect(2,2,252,252);
       monCtx.fillStyle='rgba(159,179,214,0.85)'; monCtx.font='15px system-ui,sans-serif'; monCtx.fillText((c?'the cell':'field')+' ×'+monZoom.toFixed(1),10,22);
       monTex.needsUpdate=true; }
