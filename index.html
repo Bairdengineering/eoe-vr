@@ -1725,103 +1725,131 @@
       renderMix(); refreshTools(); refreshLensButtons(); }
     buildBenchPanel();
 
-    // ===================== SINGLE CELL — the first dissipative closure =====================
-    // Validated 0-D model wired live: M = chi*J - lam (the books). J = throughput (fed or not).
-    // sigma = RESERVE (stored order). surplus fills it, deficit drains it. phi(matter) is left behind.
-    //   alive : M>=0, throughput covers maintenance, reserve full
-    //   dying : M<0 the instant feed stops, but reserve COASTS down -> reversible until spent
-    //   dead  : reserve spent. integration gone -> AUTOLYSIS: the homeostatic flow-body (lumen)
-    //           self-digests from the inside; only the committed scaffold (membrane wall) survives.
-    //   husk  : the committed scaffold alone -- inert ghost; returns to flow only by an outside decomposer
-    const CELL={ chi:1.0, Jfed:0.6, lam:0.18, autoRate:0.10, center:new THREE.Vector3(0,1.6,-3.0) };
+    // ===================== SINGLE CELL — feed it, it forms and divides; let go, it collapses =====================
+    // M = chi*s - lam (the books). s = throughput (fed or not). Fed: M>0, cellPop form, hold, and divide.
+    // Let go: M<0, reserves coast down and the membranes dissolve back to substrate. Same equation, read at the cell.
+    const CELL={ chi:1.0, Jfed:0.6, lam:0.18, center:new THREE.Vector3(0,1.5,-2.7),
+                 formTime:1.4, divPeriod:2.4, maxCells:12, R0:0.34, spread:0.92, lyseRate:0.55 };
     const cellGroup=new THREE.Group(); cellGroup.visible=false; scene.add(cellGroup);
-    let cellState={ sigma:0.0, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0, autolysis:0 };
+    let cellState={ fed:true, deadAt:null };   // aggregate flags the rest of the app + VR panel read
 
     function cellSoftTex(){ const c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d');
       const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.45,'rgba(255,255,255,0.4)'); g.addColorStop(1,'rgba(255,255,255,0)');
       x.fillStyle=g; x.fillRect(0,0,64,64); return new THREE.CanvasTexture(c); }
     const _cellTex=cellSoftTex();
-    // membrane shell — the wall, stable matter (a closure); interior lumen — the held gradient
     function sphereShell(n,r0,r1){ const a=new Float32Array(n*3); for(let i=0;i<n;i++){ const u=Math.random()*2-1, th=Math.random()*Math.PI*2, rr=r0+(r1-r0)*Math.random();
       const s=Math.sqrt(1-u*u); a[i*3]=rr*s*Math.cos(th); a[i*3+1]=rr*u; a[i*3+2]=rr*s*Math.sin(th); } return a; }
     function ballFill(n,rmax){ const a=new Float32Array(n*3); for(let i=0;i<n;i++){ const u=Math.random()*2-1, th=Math.random()*Math.PI*2, rr=rmax*Math.cbrt(Math.random());
       const s=Math.sqrt(1-u*u); a[i*3]=rr*s*Math.cos(th); a[i*3+1]=rr*u; a[i*3+2]=rr*s*Math.sin(th); } return a; }
-    const memGeo=new THREE.BufferGeometry(); memGeo.setAttribute('position',new THREE.BufferAttribute(sphereShell(7000,1.05,1.10),3));
-    const memMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.028,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
-    const memPts=new THREE.Points(memGeo,memMat); memPts.frustumCulled=false; cellGroup.add(memPts);
-    const lumGeo=new THREE.BufferGeometry(); lumGeo.setAttribute('position',new THREE.BufferAttribute(ballFill(1500,0.92),3));
-    const lumMat=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.075,transparent:true,opacity:0.32,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
-    const lumPts=new THREE.Points(lumGeo,lumMat); lumPts.frustumCulled=false; cellGroup.add(lumPts);
-    memPts.position.copy(CELL.center); lumPts.position.copy(CELL.center);
-
     const _gold=new THREE.Color('#ecb74e'), _husk=new THREE.Color('#4b4d57'), _wallHusk=new THREE.Color('#5b5d68');
 
-    // info panel (3D canvas plane — VR-ready)
+    // pool of cell slots — a colony is a handful of these (membrane shell + lumen)
+    const cellSlots=[];
+    for(let i=0;i<CELL.maxCells;i++){
+      const g=new THREE.Group(); g.visible=false; cellGroup.add(g);
+      const mg=new THREE.BufferGeometry(); mg.setAttribute('position',new THREE.BufferAttribute(sphereShell(1200,1.02,1.10),3));
+      const mm=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.030,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+      const mp=new THREE.Points(mg,mm); mp.frustumCulled=false; g.add(mp);
+      const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.BufferAttribute(ballFill(360,0.92),3));
+      const lm=new THREE.PointsMaterial({map:_cellTex,color:0xecb74e,size:0.085,transparent:true,opacity:0.32,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+      const lp=new THREE.Points(lg,lm); lp.frustumCulled=false; g.add(lp);
+      cellSlots.push({g:g, mp:mp, mm:mm, lp:lp, lm:lm, used:false});
+    }
+    function freeSlot(){ for(const s of cellSlots){ if(!s.used) return s; } return null; }
+
+    let cellPop=[]; let everSplit=0;
+    function worldOf(c){ return new THREE.Vector3(CELL.center.x+c.pos.x, CELL.center.y+c.pos.y, CELL.center.z+c.pos.z); }
+    function spawnCell(px,py,pz,sigma0){ const s=freeSlot(); if(!s) return null; s.used=true; s.g.visible=true;
+      let ax=new THREE.Vector3(Math.random()-0.5,(Math.random()-0.5)*0.4,Math.random()-0.5); if(ax.length()<1e-3) ax.set(1,0,0); ax.normalize();
+      const c={ slot:s, pos:new THREE.Vector3(px,py,pz), R:0.04, sigma:sigma0, phase:'form', age:0, pulse:Math.random()*6, wc:0, ringT:0, elong:0, lyse:0, axis:ax };
+      cellPop.push(c); const w=worldOf(c); emitWavefront(w.x,w.y,w.z, 0.25, 0.55); return c; }
+    function freeCell(c){ c.slot.used=false; c.slot.g.visible=false; const i=cellPop.indexOf(c); if(i>=0) cellPop.splice(i,1); }
+
     const CIW=820,CIH=560; const ccv=document.createElement('canvas'); ccv.width=CIW; ccv.height=CIH; const cctx=ccv.getContext('2d');
     const ctex=new THREE.CanvasTexture(ccv); if(typeof window!=='undefined') window.__eoeCellInfoCanvas=ccv;
     const cellInfo=new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95*CIH/CIW), new THREE.MeshBasicMaterial({map:ctex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
     cellInfo.renderOrder=16; cellInfo.position.set(1.95,1.7,-2.55); cellInfo.rotation.y=-0.45; cellInfo.visible=false; cellGroup.add(cellInfo);
 
-    function cellReset(){ cellState={ sigma:0.98, fed:true, state:'alive', deadAt:null, t:0, pulse:0, wc:0, autolysis:0 }; refreshCellBtns(); drawCellInfo(); }
-    function cellSetFed(f){ if(cellState.deadAt!=null) return; cellState.fed=f; refreshCellBtns(); }
+    function colonyM(){ const J=cellState.fed?CELL.Jfed:0; return CELL.chi*J-CELL.lam; }
+    function meanSigma(){ if(!cellPop.length) return 0; let a=0; for(const c of cellPop) a+=c.sigma; return a/cellPop.length; }
+    function liveCount(){ let n=0; for(const c of cellPop) if(c.phase!=='lyse') n++; return n; }
 
-    function drawCellInfo(){ const x=cctx, S=cellState; x.clearRect(0,0,CIW,CIH);
+    function cellReset(){ for(const s of cellSlots){ s.used=false; s.g.visible=false; } cellPop=[]; everSplit=0;
+      cellState={ fed:true, deadAt:null }; spawnCell(0,0,0,0.16); refreshCellBtns(); drawCellInfo(); }
+    function cellSetFed(f){ cellState.fed=f; if(f && liveCount()===0){ cellReset(); return; } if(f) cellState.deadAt=null;
+      refreshCellBtns(); if(mode==='cell') drawCtrl(); }
+
+    function stageWord(){ if(liveCount()===0) return ['collapsed \u2014 back to substrate','#6fb0e0'];
+      const M=colonyM(); if(M<0) return ['collapsing \u2014 you let go','#e0696b'];
+      const anyForm=cellPop.some(c=>c.phase==='form'), anyDiv=cellPop.some(c=>c.phase==='divide');
+      if(anyDiv) return ['dividing','#ecb74e'];
+      if(anyForm && everSplit===0) return ['forming \u2014 rings closing into a membrane','#e8c46a'];
+      if(anyForm) return ['dividing','#ecb74e'];
+      return ['held \u2014 the colony sustains','#7fb27f']; }
+
+    function drawCellInfo(){ const x=cctx; x.clearRect(0,0,CIW,CIH);
       x.fillStyle='rgba(9,12,20,0.96)'; rrect(x,6,6,CIW-12,CIH-12,20); x.fill();
       x.strokeStyle='rgba(212,160,73,0.4)'; x.lineWidth=2; rrect(x,6,6,CIW-12,CIH-12,20); x.stroke();
-      const J=(S.fed&&S.deadAt==null)?CELL.Jfed:0, M=CELL.chi*J-CELL.lam;
+      const M=colonyM(), n=liveCount(), sg=meanSigma();
       x.textAlign='left'; x.fillStyle='#e7eefc'; x.font='400 46px Georgia, serif'; x.fillText('Single Cell',44,84);
-      // state word
-      let word,col; if(S.deadAt!=null){ word=(S.autolysis<0.95?'dead — autolyzing':'husk — scaffold'); col='#6fb0e0'; }
-      else if(M>=0){ word='alive'; col='#7fb27f'; } else { word='dying'; col='#e8a04a'; }
-      x.fillStyle=col; x.font='600 40px system-ui, sans-serif'; x.fillText(word,44,148);
-      // M = chi s - lam, the books
-      x.fillStyle='#9fb3d6'; x.font='300 26px system-ui, sans-serif'; x.fillText('M = \u03c7s \u2212 \u03bb   (the books: income vs maintenance)',44,206);
+      const sw=stageWord(); x.fillStyle=sw[1]; x.font='600 38px system-ui, sans-serif'; x.fillText(sw[0],44,146);
+      x.fillStyle='#9fb3d6'; x.font='300 26px system-ui, sans-serif'; x.fillText('M = \u03c7s \u2212 \u03bb   (income vs maintenance)',44,204);
       x.fillStyle=(M>=0?'#7fb27f':'#e0696b'); x.font='600 34px system-ui, sans-serif';
-      x.fillText('M = '+(M>=0?'+':'')+M.toFixed(3)+'   '+(M>=0?'surplus':'deficit'),44,250);
-      // reserve bar
-      x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('reserve (stored order \u03c3)',44,308);
-      { const bx=44,bw=CIW-88,bh=26,y=322; x.fillStyle='rgba(74,144,212,0.18)'; rrect(x,bx,y,bw,bh,9); x.fill();
-        x.fillStyle=S.deadAt!=null?'#5b5d68':(M>=0?'#ecb74e':'#e8a04a'); rrect(x,bx,y,bw*clamp01(S.sigma),bh,9); x.fill(); }
-      // feed indicator
+      x.fillText('M = '+(M>=0?'+':'')+M.toFixed(3)+'   '+(M>=0?'surplus \u2014 it builds and divides':'deficit \u2014 it collapses'),44,248);
+      x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif'; x.fillText('cellPop held: '+n+(everSplit?('   \u00b7   divisions: '+everSplit):''),44,304);
+      x.fillStyle='#9fb3d6'; x.font='300 22px system-ui, sans-serif'; x.fillText('mean reserve (stored order \u03c3)',44,348);
+      { const bx=44,bw=CIW-88,bh=24,yb=362; x.fillStyle='rgba(74,144,212,0.18)'; rrect(x,bx,yb,bw,bh,9); x.fill();
+        x.fillStyle=(M>=0?'#ecb74e':'#e8a04a'); rrect(x,bx,yb,bw*clamp01(sg),bh,9); x.fill(); }
       x.fillStyle='#9fb3d6'; x.font='300 24px system-ui, sans-serif';
-      x.fillText('throughput: '+((S.fed&&S.deadAt==null)?'incubator feeding (s = '+CELL.Jfed.toFixed(2)+')':'incubator cut (s = 0)'),44,392);
-      // honest line
-      x.fillStyle='#7f8db0'; x.font='300 22px system-ui, sans-serif';
-      const note = S.deadAt!=null ? (S.autolysis<0.95 ? 'Reserve spent. Integration gone, the flow-body now digests itself from the inside \u2014 autolysis eats the homeostatic part down to the committed scaffold.' : 'Only the committed scaffold remains \u2014 the inert ghost. It returns to the flow only when something outside breaks it down.')
-        : (M>=0 ? 'Throughput covers maintenance. The gradient is held actively; surplus banks into reserve.'
-                : 'Income stopped, the books went red instantly \u2014 but the reserve coasts down. Feed it again before it empties and it recovers.');
-      const ws=note.split(' '); let ln='',yy=440; const mw=CIW-90;
-      for(const w of ws){ const tt=ln?ln+' '+w:w; if(x.measureText(tt).width>mw){ x.fillText(ln,44,yy); ln=w; yy+=30; } else ln=tt; } x.fillText(ln,44,yy);
-      x.fillStyle='#5f7299'; x.font='300 18px system-ui, sans-serif'; x.fillText('The first dissipative closure: alive only while throughput exceeds maintenance. Same M = \u03c7s \u2212 \u03bb, read at the cell.',44,CIH-26);
+      x.fillText('throughput: '+(cellState.fed?('feeding the substrate (s = '+CELL.Jfed.toFixed(2)+')'):'you let go (s = 0)'),44,428);
+      x.fillStyle='#7f8db0'; x.font='300 21px system-ui, sans-serif';
+      const note = (n===0) ? 'The dish is empty \u2014 the colony dissolved back into substrate. Feed it again to seed a new ball.'
+        : (M<0) ? 'You let go. Income stopped, the books are red \u2014 reserves coast down and the membranes dissolve. Feed again before they empty to rescue it.'
+        : (everSplit>0) ? 'Throughput covers maintenance with surplus. Each held cell grows until it can no longer feed its own center, then pinches in two. It keeps going while you feed it.'
+        : 'You fed the substrate. A ball of order forms, rings close into a membrane, and the first closure holds. Keep feeding and it will divide.';
+      const ws=note.split(' '); let ln='',yy=470; const mw=CIW-90;
+      for(const w of ws){ const tt=ln?ln+' '+w:w; if(x.measureText(tt).width>mw){ x.fillText(ln,44,yy); ln=w; yy+=28; } else ln=tt; } x.fillText(ln,44,yy);
       ctex.needsUpdate=true; }
 
-    function updateCell(dt,t){ const S=cellState; S.t+=dt;
-      const J=(S.fed&&S.deadAt==null)?CELL.Jfed:0, M=CELL.chi*J-CELL.lam;
-      // reserve dynamics — exactly the validated model
-      S.sigma += dt*(M>=0 ? M*(1-S.sigma) : M); S.sigma=clamp01(S.sigma);
-      if(S.sigma<=0.02 && S.deadAt==null){ S.deadAt=t; if(mode==='cell') drawCtrl(); }
-      // colour by structural state (sigma); books (M) drive the readout, not the colour
-      const sg=S.sigma; const alive = S.deadAt==null;
-      // AUTOLYSIS: once dead, integration is gone and the flow-body digests itself from the inside.
-      // The committed scaffold (membrane) is inert to it and remains as the husk.
-      if(!alive){ S.autolysis = clamp01(S.autolysis + dt*CELL.autoRate); }
-      const au = S.autolysis;
-      lumMat.color.copy(_husk).lerp(_gold, alive?sg:0.0);
-      lumMat.opacity = alive ? (0.06 + 0.30*sg) : 0.30*(1-au);   // flow-body fades as it is consumed
-      lumPts.visible = alive || au < 0.999;
-      memMat.color.copy(_wallHusk).lerp(_gold, alive?clamp01(0.3+0.7*sg):0.15);
-      memMat.opacity = alive ? 0.95 : 0.4;                       // committed scaffold survives as the ghost
-      // heartbeat — pulse rate tracks reserve; none when dead
-      const rate = alive ? (0.6+2.2*sg) : 0; S.pulse += dt*rate;
-      const beat = 1 + (alive?0.05*sg:0)*Math.sin(S.pulse*2*Math.PI);
-      lumPts.scale.setScalar(alive ? beat : (1 + 1.2*au));        // dead: flow-body swells & disperses as it self-digests
-      memPts.scale.setScalar(1+(alive?0.012*sg:0)*Math.sin(S.pulse*2*Math.PI));
-      if(alive && rate>0){ const cyc=Math.floor(S.pulse); if(cyc>S.wc){ S.wc=cyc; emitWavefront(CELL.center.x,CELL.center.y,CELL.center.z, 1.1, clamp01(0.25+0.5*sg)); } }
-      if((Math.floor(t*12)&3)===0) drawCellInfo(); }
+    function updateCell(dt,t){ const M=colonyM();
+      for(let i=cellPop.length-1;i>=0;i--){ const c=cellPop[i];
+        c.sigma += dt*(M>=0 ? M*(1-c.sigma) : M); c.sigma=clamp01(c.sigma);
+        if(M<0 && (c.phase==='form'||c.phase==='hold'||c.phase==='divide')) c.phase='die';
+        if(M>=0 && c.phase==='die' && c.sigma>0.06){ c.phase='hold'; c.age=0; }
+        if(c.phase==='form'){
+          c.R += dt*(CELL.R0)/CELL.formTime;
+          c.ringT-=dt; if(c.ringT<=0){ c.ringT=0.42; const w=worldOf(c); emitWavefront(w.x,w.y,w.z, Math.max(0.2,c.R*1.1), clamp01(0.3+0.5*c.sigma)); }
+          if(c.R>=CELL.R0){ c.R=CELL.R0; c.phase='hold'; c.age=0; const w=worldOf(c); emitWavefront(w.x,w.y,w.z, c.R*1.15, 0.6); }
+        } else if(c.phase==='hold'){
+          c.age+=dt;
+          if(M>=0 && c.sigma>0.72 && c.age>CELL.divPeriod && liveCount()<CELL.maxCells && freeSlot()){ c.phase='divide'; c.elong=0; }
+        } else if(c.phase==='divide'){
+          c.elong += dt/0.8;
+          if(c.elong>=1){ const off=c.axis.clone().multiplyScalar(CELL.R0*0.95);
+            let dp=c.pos.clone().add(off); c.pos.sub(off.clone().multiplyScalar(0.6));
+            if(dp.length()>CELL.spread) dp.setLength(CELL.spread); if(c.pos.length()>CELL.spread) c.pos.setLength(CELL.spread);
+            spawnCell(dp.x,dp.y,dp.z, c.sigma*0.85);
+            c.sigma*=0.85; c.phase='form'; c.R=CELL.R0*0.5; c.elong=0; c.age=0; everSplit++;
+            const w=worldOf(c); emitWavefront(w.x,w.y,w.z, CELL.R0*1.3, 0.85); if(mode==='cell') drawCtrl(); }
+        } else if(c.phase==='die'){ if(c.sigma<=0.02){ c.phase='lyse'; c.lyse=0; }
+        } else if(c.phase==='lyse'){ c.lyse=clamp01(c.lyse+dt*CELL.lyseRate); if(c.lyse>=0.999){ freeCell(c); continue; } }
+        const live=(c.phase!=='lyse'); const sg=c.sigma;
+        c.pulse += dt*(live?(0.6+2.0*sg):0); const beat=1+(live?0.05*sg:0)*Math.sin(c.pulse*2*Math.PI); const s=c.slot;
+        s.lm.color.copy(_husk).lerp(_gold, live?sg:0.0); s.lm.opacity = live ? (0.06+0.30*sg) : 0.30*(1-c.lyse); s.lp.visible = live || c.lyse<0.999;
+        s.mm.color.copy(_wallHusk).lerp(_gold, live?clamp01(0.3+0.7*sg):0.15); s.mm.opacity = live ? 0.95 : 0.45*(1-c.lyse);
+        let sx=c.R*beat, sy=c.R*beat, sz=c.R*beat;
+        if(c.phase==='divide'){ const e=c.elong, ax=c.axis; sx*=1+0.5*e*Math.abs(ax.x); sy*=1+0.5*e*Math.abs(ax.y); sz*=1+0.5*e*Math.abs(ax.z); }
+        if(c.phase==='lyse'){ const swl=1+1.2*c.lyse; sx*=swl; sy*=swl; sz*=swl; }
+        s.g.scale.set(sx,sy,sz); s.g.position.set(CELL.center.x+c.pos.x, CELL.center.y+c.pos.y, CELL.center.z+c.pos.z);
+        if(live && c.phase==='hold'){ const cyc=Math.floor(c.pulse); if(cyc>c.wc){ c.wc=cyc; const w=worldOf(c); emitWavefront(w.x,w.y,w.z, c.R*1.15, clamp01(0.18+0.4*sg)); } }
+      }
+      if(liveCount()===0 && cellState.deadAt==null){ cellState.deadAt=t; if(mode==='cell') drawCtrl(); }
+      if((Math.floor(t*10)%4)===0) drawCellInfo();
+    }
 
-    function refreshCellBtns(){ const fb=document.getElementById('cellFeed'); if(fb){ const feeding=cellState.fed&&cellState.deadAt==null;
-        fb.textContent = cellState.deadAt!=null ? 'Incubator (cell is dead)' : (feeding?'Incubator ON \u2014 cut it':'Restart incubator');
-        fb.classList.toggle('on',feeding); fb.style.opacity=cellState.deadAt!=null?0.45:1; } }
+    function refreshCellBtns(){ const fb=document.getElementById('cellFeed'); if(fb){ const feeding=cellState.fed; const empty=liveCount()===0;
+        fb.textContent = empty ? 'Feed the substrate \u2014 seed a cell' : (feeding?'Feeding \u2014 let go':'Feed the substrate');
+        fb.classList.toggle('on',feeding && !empty); fb.style.opacity=1; } }
     let cellPanelBuilt=false;
     function buildCellPanel(){ if(cellPanelBuilt) return; cellPanelBuilt=true;
       const fb=document.getElementById('cellFeed'); if(fb) fb.addEventListener('click',()=>cellSetFed(!cellState.fed));
