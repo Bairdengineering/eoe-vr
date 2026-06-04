@@ -30,7 +30,7 @@
   <h1>Substrate on a Sphere</h1>
   <div class="sub">M = χs − λ running directly on a geodesic surface. No grid, no projection, no poles — the field is a function of direction itself.</div>
   <div class="row"><span style="width:34px">feed</span><input id="feed" type="range" min="0.010" max="0.090" step="0.001" value="0.037"><span class="v" id="feedv">0.037</span></div>
-  <div class="row"><span style="width:34px">kill</span><input id="kill" type="range" min="0.045" max="0.075" step="0.001" value="0.060"><span class="v" id="killv">0.060</span></div>
+  <div class="row"><span style="width:34px">kill</span><input id="kill" type="range" min="0.045" max="0.075" step="0.001" value="0.065"><span class="v" id="killv">0.065</span></div>
   <div class="row"><span style="width:34px">relief</span><input id="disp" type="range" min="0" max="1.2" step="0.02" value="0.55"><span class="v" id="dispv">0.55</span></div>
   <div class="row"><span style="width:34px">flow</span><input id="rate" type="range" min="2" max="22" step="1" value="12"><span class="v" id="ratev">12</span></div>
   <div class="btns">
@@ -97,15 +97,15 @@ const NB=Int32Array.from(nbrFlat);
 // ---- reaction-diffusion state (Gray-Scott on the geodesic neighbour graph) ----
 const U=new Float32Array(n), Vv=new Float32Array(n), U2=new Float32Array(n), V2=new Float32Array(n);
 const aField=new Float32Array(n);   // what the shader reads (the V / order field)
-let FEED=0.037, KILL=0.060, RATE=12, DISP=0.55;
-const Du=0.5, Dv=0.25, DT=1.0;   // tuned for the geodesic neighbour-average Laplacian (the old 0.16/0.08 were for a grid kernel and far too weak here)
+let FEED=0.037, KILL=0.065, RATE=12, DISP=0.55;
+const Du=1.0, Dv=0.5, DT=1.0;   // canonical Gray-Scott: with the normalised neighbour-average Laplacian this is the standard, stable, pattern-forming setup
 
 function reseed(){
   U.fill(1.0); Vv.fill(0.0);
-  for(let s=0;s<24;s++){                 // 24 blobs, each grown out two neighbour-rings, classic U=0.5 / V=0.28 ignition
+  for(let s=0;s<30;s++){                 // bigger ignition blobs (3 neighbour-rings) so they survive diffusion and grow coral-style
     const c=(Math.random()*n)|0; const ring=new Set([c]);
-    for(let r=0;r<2;r++){ const cur=Array.from(ring); for(const x of cur){ for(let k=nbrStart[x];k<nbrStart[x+1];k++) ring.add(NB[k]); } }
-    for(const j of ring){ Vv[j]=0.28; U[j]=0.5; }
+    for(let r=0;r<3;r++){ const cur=Array.from(ring); for(const x of cur){ for(let k=nbrStart[x];k<nbrStart[x+1];k++) ring.add(NB[k]); } }
+    for(const j of ring){ Vv[j]=0.5; U[j]=0.3; }
   }
 }
 reseed();
