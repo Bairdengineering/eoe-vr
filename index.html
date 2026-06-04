@@ -1847,7 +1847,8 @@
         float rec=0.0, amp=1.0, freq=4.0;
         for(int k=0;k<6;k++){
           float w=clamp(lod-float(k),0.0,1.0);
-          rec += amp*w*(smT(s*freq + float(k)*vec2(0.37,0.19)) - 0.5);
+          float sv=smoothstep(0.30,0.70, smT(s*freq + float(k)*vec2(0.37,0.19)));   // crisp each recursive honeycomb cell (gold rim / blue pore)
+          rec += amp*w*(sv-0.5);
           amp*=0.6; freq*=2.0; }
         float bumpH=rec*uRelief;
         vec3 Nb=normalize(normalize(vN) - vec3(dFdx(bumpH), dFdy(bumpH), 0.0));   // fine relief rides the smooth coarse normal
@@ -1860,7 +1861,7 @@
         vec3 col=ramp*(0.32+0.9*lit)+ramp*fres*0.5;
         gl_FragColor=vec4(col,1.0); }`;
     function makeMembraneMat(){ return new THREE.ShaderMaterial({
-      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uRelief:{value:0.5}, uColAmp:{value:0.5}, uLodBias:{value:8.0}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
+      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uRelief:{value:0.5}, uColAmp:{value:0.6}, uLodBias:{value:8.0}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
       extensions:{derivatives:true},
       vertexShader:_memVert, fragmentShader:_memFrag, side:THREE.FrontSide }); }
     const _memGeo=new THREE.SphereGeometry(1,256,192);   // one shared high-res sphere -> facets vanish, cheap (geometry reused by all cells)
@@ -2426,6 +2427,21 @@
           if(ud.active && !ud.grabbing){ const ay=(gp.axes&&gp.axes.length>=4)?gp.axes[3]:((gp.axes&&gp.axes.length>=2)?gp.axes[1]:0); const sd=Math.abs(ay)>0.12?Math.min(1,(Math.abs(ay)-0.12)/0.88):0; ud.active.feedBoost=-0.92*sd; }  // push the stick to SLOW the spin-up (down to a crawl); released = full speed
           const altBtn=!!(gp.buttons[5]&&gp.buttons[5].pressed); if(altBtn&&!ud.altPrev){ if(ud.grabbing){ ud.grabbing.held=false; ud.grabbing.dissolving=true; ud.grabbing.grabbedBy=null; ud.grabbing=null; } else dissolveAimed(c); } ud.altPrev=altBtn;
         }
+      }
+
+      // VR: thumbstick glides you nearer / farther in the cell view, so you don't have to physically walk back
+      if(renderer.xr.isPresenting && xrSession && mode==='cell' && !menuVisible){
+        let ay=0; const lsrcs=xrSession.inputSources;
+        for(let si=0;si<lsrcs.length;si++){ const gp=lsrcs[si]&&lsrcs[si].gamepad; if(!gp||!gp.axes) continue;
+          const a=(gp.axes.length>=4)?gp.axes[3]:(gp.axes.length>=2?gp.axes[1]:0);
+          if(Math.abs(a)>Math.abs(ay)) ay=a; }
+        if(Math.abs(ay)>0.15){
+          const xrCam=(renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
+          xrCam.getWorldDirection(_d); _d.y=0;
+          if(_d.lengthSq()>1e-6){ _d.normalize();
+            rig.position.addScaledVector(_d, -ay*2.6*dt);                 // push stick forward = toward the cell; pull back = glide away
+            const hd=Math.hypot(rig.position.x, rig.position.z), maxR=7.0;
+            if(hd>maxR){ const sc=maxR/hd; rig.position.x*=sc; rig.position.z*=sc; } } }
       }
 
       if(mode==='table' && !renderer.xr.isPresenting){ let hz=0; tblHoverBtn=null;
