@@ -240,6 +240,7 @@
     <button id="cellFeed">Feeding — let go</button>
     <button id="cellNew" style="margin-top:8px;background:rgba(74,144,212,0.12);color:#cdd9ef;">Reseed</button>
     <button id="cellView" style="margin-top:8px;background:rgba(126,178,127,0.14);color:#cdd9ef;">View: closures</button>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">monitor zoom</span><input id="cellZoom" type="range" min="1" max="6" step="0.1" value="2.4" style="flex:1;accent-color:#ecb74e;"></div>
     <div style="margin-top:10px;border-top:1px solid rgba(120,140,180,0.18);padding-top:8px;">
       <div style="color:#9fb3d6;font-size:11px;margin-bottom:6px;">machinery — the battery holds the genome</div>
       <canvas id="machHud" width="214" height="100" style="width:100%;display:block;border-radius:8px;"></canvas>
@@ -1779,7 +1780,7 @@
     function aqRender(){ const N=AQ.N, n=N*N, d=fieldImg.data;
       for(let i=0;i<n;i++){ let p=Pfield[i]; let v=p<=0?0:(p>0.45?1:p/0.45);
         d[i*4]=Math.min(255,28+v*227); d[i*4+1]=Math.min(255,18+v*186); d[i*4+2]=Math.min(255,30+v*70); d[i*4+3]=Math.min(255,v*255); }
-      fieldCtx.putImageData(fieldImg,0,0); fieldTex.needsUpdate=true; if(typeof cellSurf!=='undefined' && cellSurf.visible) updateCellRelief(); if(typeof vesGroup!=='undefined' && vesGroup.visible) updateClosures(); }
+      fieldCtx.putImageData(fieldImg,0,0); fieldTex.needsUpdate=true; if(typeof cellSurf!=='undefined' && cellSurf.visible) updateCellRelief(); if(typeof vesGroup!=='undefined' && vesGroup.visible) updateClosures(); if(typeof fieldMon!=='undefined' && fieldMon.visible) drawMonitor(); }
 
     // build the aquarium: a live substrate field on a plane, in a defined tank frame
     aqAlloc(); aqSeed();
@@ -1816,14 +1817,35 @@
           for(const q of m){ if(Pfield[q]>thr && !_vseen[q]){ _vseen[q]=1; st.push(q); } } }
         if(a>=minA) comps.push({cx:sx/a, cy:sy/a, r:Math.sqrt(a/Math.PI), a:a}); } }
       comps.sort((p,q)=>q.a-p.a); return comps; }
-    function updateClosures(){ const N=AQ.N, comps=extractClosures(), S=AQ.size;
-      for(let i=0;i<vesPool.length;i++){ const g=vesPool[i];
-        if(i<comps.length){ const c=comps[i];
-          const tx=(c.cx/N-0.5)*S, ty=(0.5-c.cy/N)*S, tr=Math.min((c.r/N)*S*1.2, S*0.6);
-          g.visible=true;
-          g.position.x+=(tx-g.position.x)*0.25; g.position.y+=(ty-g.position.y)*0.25; g.position.z+=(0-g.position.z)*0.25;
-          g.scale.setScalar(g.scale.x+(Math.max(0.02,tr)-g.scale.x)*0.25);
-        } else { const sx=g.scale.x*0.82; g.scale.setScalar(sx); if(sx<0.01) g.visible=false; } } }
+    const _MATCH_FRAC=0.16, _MISS_MAX=8;   // identity tracking: each vesicle follows ITS blob
+    function updateClosures(){ const N=AQ.N, comps=extractClosures(), S=AQ.size; const MD2=(N*_MATCH_FRAC)*(N*_MATCH_FRAC);
+      for(const g of vesPool){ if(g.userData.cx===undefined){ g.userData.on=false; g.userData.cx=0; g.userData.cy=0; g.userData.miss=0; } }
+      const claimed=new Array(comps.length).fill(false), active=vesPool.filter(g=>g.userData.on), pairs=[];
+      for(let vi=0;vi<active.length;vi++){ const u=active[vi].userData; for(let ci=0;ci<comps.length;ci++){ const dx=comps[ci].cx-u.cx, dy=comps[ci].cy-u.cy, d2=dx*dx+dy*dy; if(d2<=MD2) pairs.push([d2,vi,ci]); } }
+      pairs.sort((a,b)=>a[0]-b[0]); const vUsed=new Array(active.length).fill(false);
+      for(const pr of pairs){ const vi=pr[1], ci=pr[2]; if(vUsed[vi]||claimed[ci]) continue; vUsed[vi]=true; claimed[ci]=true;
+        const g=active[vi], c=comps[ci]; g.userData.cx=c.cx; g.userData.cy=c.cy; g.userData.miss=0;
+        const tx=(c.cx/N-0.5)*S, ty=(0.5-c.cy/N)*S, tr=Math.min((c.r/N)*S*1.2, S*0.6);
+        g.position.x+=(tx-g.position.x)*0.22; g.position.y+=(ty-g.position.y)*0.22; g.position.z+=(0-g.position.z)*0.22;
+        g.scale.setScalar(g.scale.x+(Math.max(0.02,tr)-g.scale.x)*0.22); }
+      for(let vi=0;vi<active.length;vi++){ if(vUsed[vi]) continue; const u=active[vi].userData; u.miss++; if(u.miss>_MISS_MAX) u.on=false; }   // its blob vanished: hold a few frames, then let it go
+      for(let ci=0;ci<comps.length;ci++){ if(claimed[ci]) continue; const c=comps[ci];   // an unmatched blob is a birth — a fresh vesicle appears where it split
+        let g=null; for(const v of vesPool){ if(!v.userData.on){ g=v; break; } } if(!g) continue;
+        g.userData.on=true; g.userData.cx=c.cx; g.userData.cy=c.cy; g.userData.miss=0;
+        g.visible=true; g.position.set((c.cx/N-0.5)*S,(0.5-c.cy/N)*S,0); g.scale.setScalar(0.02); }
+      for(const g of vesPool){ if(!g.userData.on){ const sx=g.scale.x*0.82; g.scale.setScalar(sx); if(sx<0.01) g.visible=false; } } }
+    // side monitor: the flat field, zoomable — the close-up detail kept beside the big closures
+    let monZoom=2.4;
+    const monCanvas=document.createElement('canvas'); monCanvas.width=256; monCanvas.height=256; const monCtx=monCanvas.getContext('2d');
+    const monTex=new THREE.CanvasTexture(monCanvas); monTex.minFilter=THREE.LinearFilter; monTex.magFilter=THREE.LinearFilter;
+    const fieldMon=new THREE.Sprite(new THREE.SpriteMaterial({map:monTex,transparent:true,depthWrite:false}));
+    fieldMon.visible=false; cellGroup.add(fieldMon);
+    function drawMonitor(){ const N=AQ.N, src=Math.max(8,N/monZoom), o=(N-src)/2;
+      monCtx.fillStyle='#06080e'; monCtx.fillRect(0,0,256,256);
+      monCtx.drawImage(fieldCanvas, o,o,src,src, 0,0,256,256);
+      monCtx.strokeStyle='rgba(212,160,73,0.6)'; monCtx.lineWidth=4; monCtx.strokeRect(2,2,252,252);
+      monCtx.fillStyle='rgba(159,179,214,0.8)'; monCtx.font='15px system-ui,sans-serif'; monCtx.fillText('field \u00d7'+monZoom.toFixed(1),10,22);
+      monTex.needsUpdate=true; }
 
     const CIW=820,CIH=560; const ccv=document.createElement('canvas'); ccv.width=CIW; ccv.height=CIH; const cctx=ccv.getContext('2d');
     const ctex=new THREE.CanvasTexture(ccv); if(typeof window!=='undefined') window.__eoeCellInfoCanvas=ccv;
@@ -1985,7 +2007,7 @@
         aqCond={ feed:Math.max(0.006,Math.min(0.052,feed)), kill:Math.max(0.052,Math.min(0.069,kill)), key:'custom' }; aqSeed(); _aqState='forming'; _aqPrevCov=0; cellState.fed=true; refreshCellBtns(); drawChart(); drawCellInfo(); });
       const eb=document.getElementById('machEditor'); if(eb) eb.addEventListener('click',()=>{ MACH.editor=!MACH.editor; eb.textContent='Editor: '+(MACH.editor?'on':'off'); eb.classList.toggle('on',MACH.editor); });
       const sxb=document.getElementById('machSex'); if(sxb) sxb.addEventListener('click',()=>{ MACH.sex=!MACH.sex; sxb.textContent='Sex: '+(MACH.sex?'on':'off'); sxb.classList.toggle('on',MACH.sex); });
-      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; }; window.__reliefZ=()=>{ cellSurf.visible=true; updateCellRelief(); const z=_surfGeo.attributes.position.getZ((AQ.N*AQ.N/2)|0); cellSurf.visible=false; return z; }; window.__reliefMax=()=>{ cellSurf.visible=true; updateCellRelief(); const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } cellSurf.visible=false; return mx; }; window.__surfState=()=>{ const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } return {vis:cellSurf.visible, scale:cellSurf.scale.x, tilt:cellSurf.rotation.x, maxz:mx, fieldPlaneVis:fieldPlane.visible}; }; { const vb=document.getElementById('cellView'); if(vb) vb.addEventListener('click',()=>{ cellView=(cellView==='closures')?'surface':'closures'; vb.textContent='View: '+(cellView==='closures'?'closures':'field surface'); }); } window.__setView=(v)=>{cellView=v;}; window.__vesCount=()=>vesPool.filter(g=>g.visible).length; window.__closures=()=>extractClosures().length;
+      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; }; window.__reliefZ=()=>{ cellSurf.visible=true; updateCellRelief(); const z=_surfGeo.attributes.position.getZ((AQ.N*AQ.N/2)|0); cellSurf.visible=false; return z; }; window.__reliefMax=()=>{ cellSurf.visible=true; updateCellRelief(); const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } cellSurf.visible=false; return mx; }; window.__surfState=()=>{ const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } return {vis:cellSurf.visible, scale:cellSurf.scale.x, tilt:cellSurf.rotation.x, maxz:mx, fieldPlaneVis:fieldPlane.visible}; }; { const vb=document.getElementById('cellView'); if(vb) vb.addEventListener('click',()=>{ cellView=(cellView==='closures')?'surface':'closures'; vb.textContent='View: '+(cellView==='closures'?'closures':'field surface'); }); } window.__setView=(v)=>{cellView=v;}; window.__vesCount=()=>vesPool.filter(g=>g.visible).length; window.__closures=()=>extractClosures().length; window.__vesActive=()=>vesPool.filter(g=>g.userData.on).length; { const zs=document.getElementById('cellZoom'); if(zs) zs.addEventListener('input',()=>{ monZoom=parseFloat(zs.value); }); } window.__monState=()=>({vis:fieldMon.visible, zoom:monZoom});
       refreshCellBtns(); drawChart(); }
     buildCellPanel();
 
@@ -2119,7 +2141,9 @@
         drawMachVR(40,408,640,126);
         cpBtn(40,548,310,56,'Editor: '+(MACH.editor?'on':'off'),'macheditor',MACH.editor,()=>{ MACH.editor=!MACH.editor; drawCtrl(); });
         cpBtn(370,548,310,56,'Sex: '+(MACH.sex?'on':'off'),'machsex',MACH.sex,()=>{ MACH.sex=!MACH.sex; drawCtrl(); });
-        cpBtn(40,616,640,48,'View: '+(cellView==='closures'?'closures':'field surface'),'cellview',false,()=>{ cellView=(cellView==='closures')?'surface':'closures'; drawCtrl(); });
+        cpBtn(40,616,300,48,'View: '+(cellView==='closures'?'closures':'field'),'cellview',false,()=>{ cellView=(cellView==='closures')?'surface':'closures'; drawCtrl(); });
+        cpBtn(356,616,150,48,'zoom -','zoomout',false,()=>{ monZoom=Math.max(1,monZoom-0.6); drawCtrl(); });
+        cpBtn(522,616,158,48,'zoom +','zoomin',false,()=>{ monZoom=Math.min(6,monZoom+0.6); drawCtrl(); });
         cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText('Point a controller here · trigger to select',40,690);
       }
       ctrlTex.needsUpdate=true; }
@@ -2248,9 +2272,12 @@
       cellInfo.visible  = renderer.xr.isPresenting && !menuVisible && mode==='cell';
       { const _cellOn=(mode==='cell'); const _inVR=renderer.xr.isPresenting; const _surf=(cellView==='surface');
         cellSurf.visible=_cellOn&&_surf; vesGroup.visible=_cellOn&&!_surf; fieldPlane.visible=false; aqFrame.visible=false; aqGlow.visible=false;
+        fieldMon.visible=_cellOn;
         if(_cellOn){ const sc=_inVR?2.5:1.0, tilt=_inVR?0:-0.42, zp=CELL.center.z+(_inVR?-0.8:0);
           cellSurf.scale.setScalar(sc); cellSurf.position.set(CELL.center.x,CELL.center.y,zp); cellSurf.rotation.set(tilt,0,0);
-          vesGroup.scale.setScalar(sc); vesGroup.position.set(CELL.center.x,CELL.center.y,zp); vesGroup.rotation.set(tilt,0,0); } }
+          vesGroup.scale.setScalar(sc); vesGroup.position.set(CELL.center.x,CELL.center.y,zp); vesGroup.rotation.set(tilt,0,0);
+          const ms=_inVR?1.7:0.95; fieldMon.scale.set(ms,ms,1);
+          fieldMon.position.set(CELL.center.x-(_inVR?3.2:1.6), CELL.center.y+(_inVR?0.3:0.1), CELL.center.z+(_inVR?-0.2:0.4)); } }
       if(renderer.xr.isPresenting && xrSession){
         const srcs=xrSession.inputSources;
         { let dg='ctrls:'+srcs.length; for(let k=0;k<srcs.length;k++){ const s=srcs[k], g=s&&s.gamepad, hd=(s&&s.handedness)?s.handedness[0].toUpperCase():'?'; dg+=' ['+hd+(g&&g.buttons[0]&&g.buttons[0].pressed?' t1':' t0')+(g&&g.buttons[1]&&g.buttons[1].pressed?' g1':' g0')+']'; } vrDiag=dg; }
