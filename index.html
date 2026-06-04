@@ -1818,7 +1818,7 @@
         vec3 lp=normalize(position); vLP=lp;
         float th=acos(clamp(lp.z,-1.0,1.0));   // polar angle from the cell's central axis (cell centre = pole)
         float ph=atan(lp.y,lp.x);              // true circular angle
-        float rho=1.0-abs(1.0-2.0*(th/3.14159265));   // symmetric wrap: back mirrors front, seamless at the equator (no "different back")
+        float rho=sin(th);                     // smooth symmetric wrap: back mirrors front, no kink at the equator, no seam
         float sth=max(sin(th),0.04);
         float pf=smoothstep(0.0,0.16,sin(th));   // fade the coarse field relief into a smooth cap at the poles (kills the radial-spoke pinch)
         vFuv=uCenter+vec2(cos(ph),sin(ph))*(rho*uW);
@@ -1917,7 +1917,7 @@
     let _monAnim=null, _monPrevCell=false;   // one-shot pull-out animation (honeycomb -> whole cell)
     const monCanvas=document.createElement('canvas'); monCanvas.width=256; monCanvas.height=256; const monCtx=monCanvas.getContext('2d');
     const monTex=new THREE.CanvasTexture(monCanvas); monTex.minFilter=THREE.LinearFilter; monTex.magFilter=THREE.LinearFilter;
-    const fieldMon=new THREE.Mesh(new THREE.PlaneGeometry(1,1), new THREE.MeshBasicMaterial({map:monTex,transparent:true,depthWrite:false,side:THREE.DoubleSide}));
+    const fieldMon=new THREE.Sprite(new THREE.SpriteMaterial({map:monTex,transparent:true,depthWrite:false}));
     fieldMon.visible=false; cellGroup.add(fieldMon);
     function drawMonitor(){ const N=AQ.N; const c=(_lastComps&&_lastComps.length)?_lastComps[0]:null;
       // Zoom: slider left (monZoom=1) starts on the membrane honeycomb; slider right (monZoom=6)
@@ -2380,9 +2380,7 @@
           vesGroup.scale.setScalar(sc); vesGroup.position.copy(_tmpRot); vesGroup.rotation.set(tilt,cellYaw+cellOrbitYaw,0);
           const ms=_inVR?1.7:0.95; fieldMon.scale.set(ms,ms,1);
           { const bx=CELL.center.x-(_inVR?3.2:1.6), bz=CELL.center.z+(_inVR?-0.2:0.4);
-            fieldMon.position.set(bx*cy+bz*sy, CELL.center.y+(_inVR?0.3:0.1), -bx*sy+bz*cy);
-            const _cam=(_inVR&&renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera; _cam.getWorldPosition(_headP);
-            fieldMon.lookAt(_headP.x, fieldMon.position.y, _headP.z); }   // fixed panel: faces your position, no billboard spin with head turn
+            fieldMon.position.set(bx*cy+bz*sy, CELL.center.y+(_inVR?0.3:0.1), -bx*sy+bz*cy); }
           { const bx=1.95, bz=-2.55; cellInfo.position.set(bx*cy+bz*sy, 1.7, -bx*sy+bz*cy); cellInfo.rotation.set(0,-0.45+cellYaw,0); } } }
       if(renderer.xr.isPresenting && xrSession){
         const srcs=xrSession.inputSources;
