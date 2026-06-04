@@ -1896,9 +1896,23 @@
       let st,col; if(MACH.masterFrac<0.02 && MACH.eta>=MACH_ETAC){ st='error catastrophe'; col='#e0696b'; }
       else if(MACH.eta<MACH_ETAC){ st='heredity held'; col='#7fb27f'; } else { st='melting'; col='#e0696b'; }
       x.fillStyle=col; x.font='11px system-ui,sans-serif'; x.fillText(st+'   (dist '+MACH.meanD.toFixed(1)+')', gx, by+36); }
+    let _ctrlRedrawT=0;
+    function drawMachVR(x,y,w,h){
+      cpx.fillStyle='#11182a'; rrect(cpx,x,y,30,h-30,6); cpx.fill();
+      const q=MACH.Q; cpx.fillStyle=q>0.5?'#ecb74e':(q>0.25?'#c98a3a':'#e0696b'); rrect(cpx,x,y+(h-30)*(1-q),30,(h-30)*q,6); cpx.fill();
+      cpx.fillStyle='#9fb3d6'; cpx.font='300 18px system-ui,sans-serif'; cpx.fillText('Q',x+8,y+h-6);
+      const gx=x+52, gw=w-52, cw=gw/MACH.L, gy=y, gh=46, g0=MACH.pop[0]||new Uint8Array(MACH.L);
+      for(let i=0;i<MACH.L;i++){ cpx.fillStyle=(g0[i]===0)?'#4a90d4':'#e0696b'; cpx.fillRect(gx+i*cw,gy,Math.max(1,cw-0.5),gh); }
+      const frac=Math.min(1,MACH.meanD/(0.75*MACH.L)), by=gy+gh+10;
+      cpx.fillStyle='#11182a'; rrect(cpx,gx,by,gw,10,4); cpx.fill();
+      cpx.fillStyle=(MACH.eta<MACH_ETAC)?'#7fb27f':'#e0696b'; rrect(cpx,gx,by,gw*frac,10,4); cpx.fill();
+      let st,col; if(MACH.masterFrac<0.02 && MACH.eta>=MACH_ETAC){ st='error catastrophe'; col='#e0696b'; }
+      else if(MACH.eta<MACH_ETAC){ st='heredity held'; col='#7fb27f'; } else { st='melting'; col='#e0696b'; }
+      cpx.fillStyle=col; cpx.font='500 22px system-ui,sans-serif'; cpx.fillText(st+'    η '+MACH.eta.toFixed(3)+'    dist '+MACH.meanD.toFixed(1), gx, by+36); }
 
     function updateCell(dt,t){ aqStep(); aqRender();
       const _mst=aqStats(); machStep(dt,_mst.coverage); drawMachHud();
+      if(renderer.xr.isPresenting && mode==='cell'){ _ctrlRedrawT-=dt; if(_ctrlRedrawT<=0){ _ctrlRedrawT=0.2; drawCtrl(); } }
       _aqCovT-=dt; if(_aqCovT<=0){ _aqCovT=0.4; const st=aqStats(); _aqCount=aqCount();
         if(!cellState.fed || aqCond.key==='collapse'){ if(st.coverage<0.004) _aqState='collapsed'; else _aqState='collapsing'; }
         else if(st.coverage>_aqPrevCov+0.002) _aqState='dividing';
@@ -1924,7 +1938,7 @@
         aqCond={ feed:Math.max(0.006,Math.min(0.052,feed)), kill:Math.max(0.052,Math.min(0.069,kill)), key:'custom' }; aqSeed(); _aqState='forming'; _aqPrevCov=0; cellState.fed=true; refreshCellBtns(); drawChart(); drawCellInfo(); });
       const eb=document.getElementById('machEditor'); if(eb) eb.addEventListener('click',()=>{ MACH.editor=!MACH.editor; eb.textContent='Editor: '+(MACH.editor?'on':'off'); eb.classList.toggle('on',MACH.editor); });
       const sxb=document.getElementById('machSex'); if(sxb) sxb.addEventListener('click',()=>{ MACH.sex=!MACH.sex; sxb.textContent='Sex: '+(MACH.sex?'on':'off'); sxb.classList.toggle('on',MACH.sex); });
-      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode;
+      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; };
       refreshCellBtns(); drawChart(); }
     buildCellPanel();
 
@@ -2045,16 +2059,21 @@
           cpx.fillStyle='rgba(236,183,78,0.6)'; rrect(cpx, 700, ty, 6, th, 3); cpx.fill(); }
         cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText(ctrlView==='journal'?'thumbstick = scroll \u00b7 trigger = load entry':'thumbstick = scroll \u00b7 trigger = select', 40, 742);
       } else if(mode==='cell'){
-        cpx.fillStyle='#e7eefc'; cpx.font='400 40px Georgia, serif'; cpx.fillText('Single Cell',40,68);
+        cpx.fillStyle='#e7eefc'; cpx.font='400 40px Georgia, serif'; cpx.fillText('Single Cell',40,60);
+        const Rg=REGIMES.find(r=>r.key===aqCond.key);
+        cpx.fillStyle='#9fb3d6'; cpx.font='300 20px system-ui, sans-serif'; cpx.fillText('regime: '+(Rg?Rg.name:'custom')+'   —   set it, the field runs it',40,90);
+        cpBtn(40,108,202,58,'Dividing','rgdivide',aqCond.key==='divide',()=>{ setRegime('divide'); drawCtrl(); });
+        cpBtn(258,108,202,58,'Held','rghold',aqCond.key==='hold',()=>{ setRegime('hold'); drawCtrl(); });
+        cpBtn(476,108,204,58,'Collapsed','rgcollapse',aqCond.key==='collapse',()=>{ setRegime('collapse'); drawCtrl(); });
         const dead=cellState.deadAt!=null, feeding=cellState.fed&&!dead;
-        const feedLabel = dead?'Cell is dead':(feeding?'Incubator ON \u2014 cut it':'Restart incubator');
-        cpBtn(40,120,640,76,feedLabel,'feed',feeding,()=>{ cellSetFed(!cellState.fed); drawCtrl(); },'go');
-        cpBtn(40,212,640,72,'New cell','newcell',false,()=>{ cellReset(); drawCtrl(); });
-        cpx.fillStyle='#9fb3d6'; cpx.font='300 22px system-ui, sans-serif';
-        const note='Cut the incubator and watch the books go red while the reserve coasts down. Restart before it empties to rescue it.';
-        const ws=note.split(' '); let ln='',yy=330; const mw=640;
-        for(const w of ws){ const tt=ln?ln+' '+w:w; if(cpx.measureText(tt).width>mw){ cpx.fillText(ln,40,yy); ln=w; yy+=30; } else ln=tt; } cpx.fillText(ln,40,yy);
-        cpx.fillStyle='#5f7299'; cpx.font='300 19px system-ui, sans-serif'; cpx.fillText('Point a controller here \u00b7 trigger to select',40,yy+50);
+        const feedLabel = dead?'Cell is dead':(feeding?'Feeding — let go':'Feed the field');
+        cpBtn(40,182,310,62,feedLabel,'feed',feeding,()=>{ cellSetFed(!cellState.fed); drawCtrl(); },'go');
+        cpBtn(370,182,310,62,'Reseed','newcell',false,()=>{ cellReset(); drawCtrl(); });
+        cpx.fillStyle='#9fb3d6'; cpx.font='300 20px system-ui, sans-serif'; cpx.fillText('machinery — the battery holds the genome',40,286);
+        drawMachVR(40,300,640,150);
+        cpBtn(40,470,310,62,'Editor: '+(MACH.editor?'on':'off'),'macheditor',MACH.editor,()=>{ MACH.editor=!MACH.editor; drawCtrl(); });
+        cpBtn(370,470,310,62,'Sex: '+(MACH.sex?'on':'off'),'machsex',MACH.sex,()=>{ MACH.sex=!MACH.sex; drawCtrl(); });
+        cpx.fillStyle='#5f7299'; cpx.font='300 19px system-ui, sans-serif'; cpx.fillText('Point a controller here · trigger to select',40,584);
       }
       ctrlTex.needsUpdate=true; }
 
