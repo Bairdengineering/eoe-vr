@@ -240,7 +240,7 @@
     <button id="cellFeed">Feeding — let go</button>
     <button id="cellNew" style="margin-top:8px;background:rgba(74,144,212,0.12);color:#cdd9ef;">Reseed</button>
     <button id="cellView" style="margin-top:8px;background:rgba(126,178,127,0.14);color:#cdd9ef;">View: closures</button>
-    <div style="margin-top:10px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">monitor zoom</span><input id="cellZoom" type="range" min="1" max="6" step="0.1" value="2.4" style="flex:1;accent-color:#ecb74e;"></div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:8px;"><span style="color:#9fb3d6;font-size:12px;">monitor zoom</span><input id="cellZoom" type="range" min="1" max="6" step="0.1" value="6" style="flex:1;accent-color:#ecb74e;"></div>
     <div style="margin-top:10px;border-top:1px solid rgba(120,140,180,0.18);padding-top:8px;">
       <div style="color:#9fb3d6;font-size:11px;margin-bottom:6px;">machinery — the battery holds the genome</div>
       <canvas id="machHud" width="214" height="100" style="width:100%;display:block;border-radius:8px;"></canvas>
@@ -1839,14 +1839,20 @@
         g.visible=true; g.position.set((c.cx/N-0.5)*S,(0.5-c.cy/N)*S,0); g.scale.set(0.02,0.02,0.02); g.rotation.z=-c.th; }
       for(const g of vesPool){ if(!g.userData.on){ g.scale.multiplyScalar(0.82); if(g.scale.x<0.01) g.visible=false; } } }
     // side monitor: the flat field, zoomable — the close-up detail kept beside the big closures
-    let monZoom=2.4;
+    let monZoom=6;                 // start fully zoomed in on the membrane honeycomb
+    let _monAnim=null, _monPrevCell=false;   // one-shot pull-out animation (honeycomb -> whole cell)
     const monCanvas=document.createElement('canvas'); monCanvas.width=256; monCanvas.height=256; const monCtx=monCanvas.getContext('2d');
     const monTex=new THREE.CanvasTexture(monCanvas); monTex.minFilter=THREE.LinearFilter; monTex.magFilter=THREE.LinearFilter;
     const fieldMon=new THREE.Sprite(new THREE.SpriteMaterial({map:monTex,transparent:true,depthWrite:false}));
     fieldMon.visible=false; cellGroup.add(fieldMon);
     function drawMonitor(){ const N=AQ.N; const c=(_lastComps&&_lastComps.length)?_lastComps[0]:null;
-      const base=N;        // monZoom=1 frames the WHOLE FIELD (the bigger picture); higher dives toward the cell membrane
-      const src=Math.max(8, Math.min(N, base/monZoom));
+      // Continuity zoom: monZoom=1 frames the WHOLE CELL (same footprint as the 3D sphere);
+      // monZoom=6 dives all the way into the membrane honeycomb. Geometric blend = even, natural zoom.
+      const cellR = c ? c.r : N*0.22;
+      const srcOut = Math.min(N, 2.2*cellR);                 // out: the cell, framed like the 3D version
+      const srcIn  = Math.max(11, srcOut*0.18);               // in: membrane honeycomb
+      const tz = (Math.min(6,Math.max(1,monZoom)) - 1) / 5;   // 0 = out, 1 = in
+      const src = Math.max(8, Math.min(N, srcOut*Math.pow(srcIn/srcOut, tz)));
       const cx=c?c.cx:N/2, cy=c?c.cy:N/2;
       const ox=Math.max(0,Math.min(N-src, cx-src/2)), oy=Math.max(0,Math.min(N-src, cy-src/2));
       monCtx.fillStyle='#06080e'; monCtx.fillRect(0,0,256,256);
@@ -2017,7 +2023,7 @@
         aqCond={ feed:Math.max(0.006,Math.min(0.052,feed)), kill:Math.max(0.052,Math.min(0.069,kill)), key:'custom' }; aqSeed(); _aqState='forming'; _aqPrevCov=0; cellState.fed=true; refreshCellBtns(); drawChart(); drawCellInfo(); });
       const eb=document.getElementById('machEditor'); if(eb) eb.addEventListener('click',()=>{ MACH.editor=!MACH.editor; eb.textContent='Editor: '+(MACH.editor?'on':'off'); eb.classList.toggle('on',MACH.editor); });
       const sxb=document.getElementById('machSex'); if(sxb) sxb.addEventListener('click',()=>{ MACH.sex=!MACH.sex; sxb.textContent='Sex: '+(MACH.sex?'on':'off'); sxb.classList.toggle('on',MACH.sex); });
-      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; }; window.__reliefZ=()=>{ cellSurf.visible=true; updateCellRelief(); const z=_surfGeo.attributes.position.getZ((AQ.N*AQ.N/2)|0); cellSurf.visible=false; return z; }; window.__reliefMax=()=>{ cellSurf.visible=true; updateCellRelief(); const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } cellSurf.visible=false; return mx; }; window.__surfState=()=>{ const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } return {vis:cellSurf.visible, scale:cellSurf.scale.x, tilt:cellSurf.rotation.x, maxz:mx, fieldPlaneVis:fieldPlane.visible}; }; { const vb=document.getElementById('cellView'); if(vb) vb.addEventListener('click',()=>{ cellView=(cellView==='closures')?'surface':'closures'; vb.textContent='View: '+(cellView==='closures'?'closures':'field surface'); }); } window.__setView=(v)=>{cellView=v;}; window.__vesCount=()=>vesPool.filter(g=>g.visible).length; window.__closures=()=>extractClosures().length; window.__vesActive=()=>vesPool.filter(g=>g.userData.on).length; window.__vesAspect=()=>{ let mx=1; for(const g of vesPool){ if(g.visible&&g.scale.y>1e-4){ const r=g.scale.x/g.scale.y; if(r>mx)mx=r; } } return mx; }; { const zs=document.getElementById('cellZoom'); if(zs) zs.addEventListener('input',()=>{ monZoom=parseFloat(zs.value); }); } window.__monState=()=>({vis:fieldMon.visible, zoom:monZoom});
+      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; }; window.__reliefZ=()=>{ cellSurf.visible=true; updateCellRelief(); const z=_surfGeo.attributes.position.getZ((AQ.N*AQ.N/2)|0); cellSurf.visible=false; return z; }; window.__reliefMax=()=>{ cellSurf.visible=true; updateCellRelief(); const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } cellSurf.visible=false; return mx; }; window.__surfState=()=>{ const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } return {vis:cellSurf.visible, scale:cellSurf.scale.x, tilt:cellSurf.rotation.x, maxz:mx, fieldPlaneVis:fieldPlane.visible}; }; { const vb=document.getElementById('cellView'); if(vb) vb.addEventListener('click',()=>{ cellView=(cellView==='closures')?'surface':'closures'; vb.textContent='View: '+(cellView==='closures'?'closures':'field surface'); }); } window.__setView=(v)=>{cellView=v;}; window.__vesCount=()=>vesPool.filter(g=>g.visible).length; window.__closures=()=>extractClosures().length; window.__vesActive=()=>vesPool.filter(g=>g.userData.on).length; window.__vesAspect=()=>{ let mx=1; for(const g of vesPool){ if(g.visible&&g.scale.y>1e-4){ const r=g.scale.x/g.scale.y; if(r>mx)mx=r; } } return mx; }; { const zs=document.getElementById('cellZoom'); if(zs) zs.addEventListener('input',()=>{ _monAnim=null; monZoom=parseFloat(zs.value); }); } window.__monState=()=>({vis:fieldMon.visible, zoom:monZoom});
       refreshCellBtns(); drawChart(); }
     buildCellPanel();
 
@@ -2152,8 +2158,8 @@
         cpBtn(40,548,310,56,'Editor: '+(MACH.editor?'on':'off'),'macheditor',MACH.editor,()=>{ MACH.editor=!MACH.editor; drawCtrl(); });
         cpBtn(370,548,310,56,'Sex: '+(MACH.sex?'on':'off'),'machsex',MACH.sex,()=>{ MACH.sex=!MACH.sex; drawCtrl(); });
         cpBtn(40,616,300,48,'View: '+(cellView==='closures'?'closures':'field'),'cellview',false,()=>{ cellView=(cellView==='closures')?'surface':'closures'; drawCtrl(); });
-        cpBtn(356,616,150,48,'zoom -','zoomout',false,()=>{ monZoom=Math.max(1,monZoom-0.6); drawCtrl(); });
-        cpBtn(522,616,158,48,'zoom +','zoomin',false,()=>{ monZoom=Math.min(6,monZoom+0.6); drawCtrl(); });
+        cpBtn(356,616,150,48,'zoom -','zoomout',false,()=>{ _monAnim=null; monZoom=Math.max(1,monZoom-0.6); drawCtrl(); });
+        cpBtn(522,616,158,48,'zoom +','zoomin',false,()=>{ _monAnim=null; monZoom=Math.min(6,monZoom+0.6); drawCtrl(); });
         cpx.fillStyle='#5f7299'; cpx.font='300 18px system-ui, sans-serif'; cpx.fillText('Point a controller here · trigger to select',40,690);
       }
       ctrlTex.needsUpdate=true; }
@@ -2283,6 +2289,13 @@
       { const _cellOn=(mode==='cell'); const _inVR=renderer.xr.isPresenting; const _surf=(cellView==='surface');
         cellSurf.visible=_cellOn&&_surf; vesGroup.visible=_cellOn&&!_surf; fieldPlane.visible=false; aqFrame.visible=false; aqGlow.visible=false;
         fieldMon.visible=_cellOn;
+        if(_cellOn && !_monPrevCell){ monZoom=6; _monAnim={t:0}; }   // entered cell mode: reset to honeycomb, start pull-out
+        if(_monAnim && _cellOn){ _monAnim.t=Math.min(1,_monAnim.t+dt/2.6);
+          const e=1-Math.pow(1-_monAnim.t,3);                          // ease-out
+          monZoom=6+(1-6)*e;                                            // honeycomb (6) -> whole cell (1)
+          const zs=document.getElementById('cellZoom'); if(zs) zs.value=monZoom.toFixed(2);
+          if(_monAnim.t>=1) _monAnim=null; }
+        _monPrevCell=_cellOn;
         if(_cellOn){ const sc=_inVR?2.5:1.0, tilt=_inVR?0:-0.42, zp=CELL.center.z+(_inVR?-0.8:0);
           cellSurf.scale.setScalar(sc); cellSurf.position.set(CELL.center.x,CELL.center.y,zp); cellSurf.rotation.set(tilt,0,0);
           vesGroup.scale.setScalar(sc); vesGroup.position.set(CELL.center.x,CELL.center.y,zp); vesGroup.rotation.set(tilt,0,0);
