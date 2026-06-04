@@ -1778,7 +1778,7 @@
     function aqRender(){ const N=AQ.N, n=N*N, d=fieldImg.data;
       for(let i=0;i<n;i++){ let p=Pfield[i]; let v=p<=0?0:(p>0.45?1:p/0.45);
         d[i*4]=Math.min(255,28+v*227); d[i*4+1]=Math.min(255,18+v*186); d[i*4+2]=Math.min(255,30+v*70); d[i*4+3]=Math.min(255,v*255); }
-      fieldCtx.putImageData(fieldImg,0,0); fieldTex.needsUpdate=true; }
+      fieldCtx.putImageData(fieldImg,0,0); fieldTex.needsUpdate=true; if(typeof cellSurf!=='undefined' && cellSurf.visible) updateCellRelief(); }
 
     // build the aquarium: a live substrate field on a plane, in a defined tank frame
     aqAlloc(); aqSeed();
@@ -1790,6 +1790,15 @@
     const aqFrame=new THREE.LineSegments(_aqFrameGeo, new THREE.LineBasicMaterial({color:0xd4a049,transparent:true,opacity:0.45})); aqFrame.position.copy(CELL.center); cellGroup.add(aqFrame);
     const _aqGlowGeo=new THREE.PlaneGeometry(AQ.size*1.02,AQ.size*1.02);
     const aqGlow=new THREE.Mesh(_aqGlowGeo, new THREE.MeshBasicMaterial({color:0x0a0d14,transparent:true,opacity:0.55,depthWrite:false,side:THREE.DoubleSide})); aqGlow.position.set(CELL.center.x,CELL.center.y,CELL.center.z-0.02); cellGroup.add(aqGlow);
+    // VR: a big 3D relief of the field — height is the order P, so you fly the living membrane in 3D
+    const _surfGeo=new THREE.PlaneGeometry(AQ.size,AQ.size,AQ.N-1,AQ.N-1);
+    { const nv=_surfGeo.attributes.position.count; _surfGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(nv*3).fill(1),3)); }
+    const _surfMat=new THREE.MeshBasicMaterial({map:fieldTex,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+    const cellSurf=new THREE.Mesh(_surfGeo,_surfMat); cellSurf.position.copy(CELL.center); cellSurf.visible=false; cellGroup.add(cellSurf);
+    const _SURF_H=AQ.size*0.9;
+    function updateCellRelief(){ const pos=_surfGeo.attributes.position, col=_surfGeo.attributes.color, n=AQ.N*AQ.N;
+      for(let k=0;k<n;k++){ const v=Pfield[k]||0; pos.setZ(k, v*_SURF_H); const b=0.30+0.95*Math.min(1.2,v); col.setXYZ(k,b,b,b); }
+      pos.needsUpdate=true; col.needsUpdate=true; }
 
     const CIW=820,CIH=560; const ccv=document.createElement('canvas'); ccv.width=CIW; ccv.height=CIH; const cctx=ccv.getContext('2d');
     const ctex=new THREE.CanvasTexture(ccv); if(typeof window!=='undefined') window.__eoeCellInfoCanvas=ccv;
@@ -1938,7 +1947,7 @@
         aqCond={ feed:Math.max(0.006,Math.min(0.052,feed)), kill:Math.max(0.052,Math.min(0.069,kill)), key:'custom' }; aqSeed(); _aqState='forming'; _aqPrevCov=0; cellState.fed=true; refreshCellBtns(); drawChart(); drawCellInfo(); });
       const eb=document.getElementById('machEditor'); if(eb) eb.addEventListener('click',()=>{ MACH.editor=!MACH.editor; eb.textContent='Editor: '+(MACH.editor?'on':'off'); eb.classList.toggle('on',MACH.editor); });
       const sxb=document.getElementById('machSex'); if(sxb) sxb.addEventListener('click',()=>{ MACH.sex=!MACH.sex; sxb.textContent='Sex: '+(MACH.sex?'on':'off'); sxb.classList.toggle('on',MACH.sex); });
-      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; };
+      window.__setEditor=(b)=>{MACH.editor=b;}; window.__setSex=(b)=>{MACH.sex=b;}; machReset(); window.__setMode=setMode; window.__drawCtrl=()=>drawCtrl(); window.__ctrlBtnIds=()=>ctrlButtons.map(b=>b.id); window.__ctrlPress=(id)=>{ const b=ctrlButtons.find(x=>x.id===id); if(b){ b.fn(); return true; } return false; }; window.__reliefZ=()=>{ cellSurf.visible=true; updateCellRelief(); const z=_surfGeo.attributes.position.getZ((AQ.N*AQ.N/2)|0); cellSurf.visible=false; return z; }; window.__reliefMax=()=>{ cellSurf.visible=true; updateCellRelief(); const p=_surfGeo.attributes.position; let mx=0; for(let k=0;k<p.count;k++){ const z=p.getZ(k); if(z>mx)mx=z; } cellSurf.visible=false; return mx; };
       refreshCellBtns(); drawChart(); }
     buildCellPanel();
 
@@ -2199,6 +2208,10 @@
       infoPlane.visible = renderer.xr.isPresenting && !menuVisible && mode==='table' && !!showcase;
       molInfo.visible   = renderer.xr.isPresenting && !menuVisible && mode==='mol' && !!curMol;
       cellInfo.visible  = renderer.xr.isPresenting && !menuVisible && mode==='cell';
+      { const _inVRcell=renderer.xr.isPresenting && !menuVisible && mode==='cell';
+        cellSurf.visible=_inVRcell; fieldPlane.visible=(mode==='cell')&&!_inVRcell;
+        aqFrame.visible=(mode==='cell')&&!_inVRcell; aqGlow.visible=(mode==='cell')&&!_inVRcell;
+        if(_inVRcell){ cellSurf.scale.setScalar(2.5); cellSurf.position.set(CELL.center.x,CELL.center.y,CELL.center.z-0.8); } }
       if(renderer.xr.isPresenting && xrSession){
         const srcs=xrSession.inputSources;
         { let dg='ctrls:'+srcs.length; for(let k=0;k<srcs.length;k++){ const s=srcs[k], g=s&&s.gamepad, hd=(s&&s.handedness)?s.handedness[0].toUpperCase():'?'; dg+=' ['+hd+(g&&g.buttons[0]&&g.buttons[0].pressed?' t1':' t0')+(g&&g.buttons[1]&&g.buttons[1].pressed?' g1':' g0')+']'; } vrDiag=dg; }
