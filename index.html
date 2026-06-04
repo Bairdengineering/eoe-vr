@@ -1808,40 +1808,59 @@
     // 3D honeycomb membrane: a sphere whose surface is pushed out along the live field ridges.
     // The framework is circular, so the field is wrapped onto the cell RADIALLY about its centre
     // (azimuthal projection) rather than stamped on as a flat x/y sheet -> congruent and pole-pinch free.
-    const _memVert=`uniform sampler2D uField; uniform vec2 uCenter; uniform float uW; uniform float uDisp; uniform float uTex; uniform float uN;
-      varying vec2 vFuv; varying vec3 vVN; varying vec3 vVP;
+    const _memVert=`uniform sampler2D uField; uniform vec2 uCenter; uniform float uW; uniform float uDisp; uniform float uN;
+      varying vec2 vFuv; varying vec3 vN; varying vec3 vVP; varying vec3 vLP;
       float sm(vec2 uv){ vec2 p=uv*uN+0.5; vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); return texture2D(uField,(i+f-0.5)/uN).a; }
-      float smT(vec2 uv){ vec2 m=abs(fract(uv*0.5)*2.0-1.0); return sm(m); }   // seamless mirrored tile -> the motif reused at any scale
+      float Hb(float ph,float rho){ vec2 fuv=uCenter+vec2(cos(ph),sin(ph))*(rho*uW); return sm(fuv)*uDisp; }   // coarse base relief
       void main(){
-        float th=acos(clamp(position.z,-1.0,1.0));   // polar angle from the cell's central axis (cell centre = pole)
-        float ph=atan(position.y,position.x);          // true circular angle
-        float rho=th/3.14159265;                        // radial: linear in angle, so the field wraps the cell radially (no x/y grid stamp)
-        vec2 fuv=uCenter+vec2(cos(ph),sin(ph))*(rho*uW);
-        vFuv=fuv;
-        float h0=sm(fuv);                               // de-blocked base honeycomb
-        vec2 s=vec2(ph*0.15915494, rho);                // surface coords for the self-similar octaves
-        float tex=0.5*smT(s*4.0+0.17)+0.25*smT(s*8.0+0.53)+0.125*smT(s*16.0+0.81);  // SAME honeycomb at smaller & smaller scale = the texture
-        vVN=normalize(normalMatrix*normal);
-        vec3 p=position+normal*(h0*uDisp + tex*uTex);
+        vec3 lp=normalize(position); vLP=lp;
+        float th=acos(clamp(lp.z,-1.0,1.0));   // polar angle from the cell's central axis (cell centre = pole)
+        float ph=atan(lp.y,lp.x);              // true circular angle
+        float rho=th/3.14159265;               // radial: linear in angle (no x/y grid stamp)
+        float sth=max(sin(th),0.04);
+        vFuv=uCenter+vec2(cos(ph),sin(ph))*(rho*uW);
+        float H=Hb(ph,rho);
+        float e=0.004;                          // analytic normal of the coarse shape (facet-free at any zoom)
+        float dHdph=(Hb(ph+e,rho)-H)/e;
+        float dHdth=((Hb(ph,rho+e)-H)/e)/3.14159265;
+        vec3 Tph=vec3(-sth*sin(ph), sth*cos(ph), 0.0);
+        vec3 Tth=vec3(cos(th)*cos(ph), cos(th)*sin(ph), -sth);
+        vec3 nLocal=normalize(cross(Tth+lp*dHdth, Tph+lp*dHdph));
+        if(dot(nLocal,lp)<0.0) nLocal=-nLocal;
+        vN=normalize(normalMatrix*nLocal);
+        vec3 p=position+lp*H;
         vec4 mv=modelViewMatrix*vec4(p,1.0); vVP=mv.xyz;
         gl_Position=projectionMatrix*mv; }`;
-    const _memFrag=`uniform sampler2D uField; uniform float uChi; uniform float uLam; uniform float uN; varying vec2 vFuv; varying vec3 vVN; varying vec3 vVP;
+    const _memFrag=`uniform sampler2D uField; uniform float uChi; uniform float uLam; uniform float uN; uniform float uRelief; uniform float uLodBias;
+      varying vec2 vFuv; varying vec3 vN; varying vec3 vVP; varying vec3 vLP;
       float sm(vec2 uv){ vec2 p=uv*uN+0.5; vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); return texture2D(uField,(i+f-0.5)/uN).a; }
+      float smT(vec2 uv){ vec2 m=abs(fract(uv*0.5)*2.0-1.0); return sm(m); }
       void main(){
-        float h=sm(vFuv);                                                               // de-blocked, per-pixel field sample
-        // shade with the TRUE normal of the displaced surface, so relief reads with real depth (no magic bump constant)
-        vec3 gN=normalize(cross(dFdx(vVP),dFdy(vVP)));
-        if(dot(gN,vVN)<0.0) gN=-gN;
-        vec3 Nb=normalize(mix(gN, normalize(vVN), 0.3));                                 // ease triangle facets without flattening the relief
+        vec3 lp=normalize(vLP);
+        float th=acos(clamp(lp.z,-1.0,1.0));
+        float ph=atan(lp.y,lp.x);
+        vec2 s=vec2(ph*0.15915494, th/3.14159265);
+        // VIEW-DEPENDENT RECURSION: octaves resolved = how big the surface is on screen.
+        // Closer -> more octaves of the SAME honeycomb fade in. Only computed for visible pixels.
+        float px=max(fwidth(vFuv.x), fwidth(vFuv.y))+1e-7;
+        float lod=clamp(-log2(px)-uLodBias, 0.0, 6.0);
+        float fineH=0.0, amp=1.0, freq=4.0;
+        for(int k=0;k<6;k++){
+          float w=clamp(lod-float(k),0.0,1.0);
+          fineH += amp*w*(smT(s*freq + float(k)*vec2(0.37,0.19)) - 0.5);
+          amp*=0.6; freq*=2.0; }
+        fineH*=uRelief;
+        vec3 Nb=normalize(normalize(vN) - vec3(dFdx(fineH), dFdy(fineH), 0.0));   // fine detail rides the smooth coarse normal
         vec3 V=normalize(-vVP);
+        float h=sm(vFuv);                                                               // colour from base order, per-pixel
         float lit=0.4+0.6*clamp(dot(Nb,normalize(vec3(0.35,0.5,0.78))),0.0,1.0);
         float fres=pow(1.0-clamp(dot(Nb,V),0.0,1.0),2.2);
-        float M=uChi*h-uLam; float Mn=clamp((M+0.5)*0.5,0.0,1.0);                        // colour IS the engine quantity M = chi*s - lambda, not a chosen hue
-        vec3 ramp=mix(vec3(46.0,116.0,173.0)/255.0, vec3(236.0,183.0,78.0)/255.0, Mn);    // same blue<->gold M ramp as molecules / atoms / substrate
+        float M=uChi*h-uLam; float Mn=clamp((M+0.5)*0.5,0.0,1.0);                        // colour IS the engine quantity M = chi*s - lambda
+        vec3 ramp=mix(vec3(46.0,116.0,173.0)/255.0, vec3(236.0,183.0,78.0)/255.0, Mn);    // same blue<->gold M ramp as the rest of the world
         vec3 col=ramp*(0.32+0.9*lit)+ramp*fres*0.5;
         gl_FragColor=vec4(col,1.0); }`;
     function makeMembraneMat(){ return new THREE.ShaderMaterial({
-      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uTex:{value:0.06}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
+      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uRelief:{value:0.5}, uLodBias:{value:8.0}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
       extensions:{derivatives:true},
       vertexShader:_memVert, fragmentShader:_memFrag, side:THREE.FrontSide }); }
     const _memGeo=new THREE.SphereGeometry(1,256,192);   // one shared high-res sphere -> facets vanish, cheap (geometry reused by all cells)
