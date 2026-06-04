@@ -1823,16 +1823,21 @@
         gl_Position=projectionMatrix*mv; }`;
     const _memFrag=`uniform sampler2D uField; uniform float uChi; uniform float uLam; varying vec2 vFuv; varying vec3 vVN; varying vec3 vVP;
       void main(){
-        float h=texture2D(uField,vFuv).a;                                               // per-PIXEL field sample -> crisp, not limited by mesh resolution
-        vec3 N=normalize(vVN), V=normalize(-vVP);
-        float lit=0.45+0.55*clamp(dot(N,normalize(vec3(0.3,0.5,0.8))),0.0,1.0);
-        float fres=pow(1.0-clamp(dot(N,V),0.0,1.0),2.2);
+        float h=texture2D(uField,vFuv).a;                                               // per-PIXEL field sample -> crisp colour
+        // shade with the TRUE normal of the displaced surface, so deep pores read with real depth (no magic bump constant)
+        vec3 gN=normalize(cross(dFdx(vVP),dFdy(vVP)));
+        if(dot(gN,vVN)<0.0) gN=-gN;
+        vec3 Nb=normalize(mix(gN, normalize(vVN), 0.3));                                 // ease triangle facets without flattening the relief
+        vec3 V=normalize(-vVP);
+        float lit=0.4+0.6*clamp(dot(Nb,normalize(vec3(0.35,0.5,0.78))),0.0,1.0);
+        float fres=pow(1.0-clamp(dot(Nb,V),0.0,1.0),2.2);
         float M=uChi*h-uLam; float Mn=clamp((M+0.5)*0.5,0.0,1.0);                        // colour IS the engine quantity M = chi*s - lambda, not a chosen hue
         vec3 ramp=mix(vec3(46.0,116.0,173.0)/255.0, vec3(236.0,183.0,78.0)/255.0, Mn);    // same blue<->gold M ramp as molecules / atoms / substrate
-        vec3 col=ramp*(0.4+0.8*lit)+ramp*fres*0.55;
+        vec3 col=ramp*(0.32+0.9*lit)+ramp*fres*0.5;
         gl_FragColor=vec4(col,1.0); }`;
     function makeMembraneMat(){ return new THREE.ShaderMaterial({
-      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.24}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
+      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.36}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
+      extensions:{derivatives:true},
       vertexShader:_memVert, fragmentShader:_memFrag, side:THREE.FrontSide }); }
     for(let i=0;i<48;i++){ const g=new THREE.Group();
       const mat=makeMembraneMat();
