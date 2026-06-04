@@ -1845,8 +1845,8 @@
     const fieldMon=new THREE.Sprite(new THREE.SpriteMaterial({map:monTex,transparent:true,depthWrite:false}));
     fieldMon.visible=false; cellGroup.add(fieldMon);
     function drawMonitor(){ const N=AQ.N; const c=(_lastComps&&_lastComps.length)?_lastComps[0]:null;
-      const base=c?Math.min(N,Math.max(16,4.0*c.r)):N;        // monZoom=1 frames the whole cell; higher dives into its membrane
-      const src=Math.max(8, base/monZoom);
+      const base=N;        // monZoom=1 frames the WHOLE FIELD (the bigger picture); higher dives toward the cell membrane
+      const src=Math.max(8, Math.min(N, base/monZoom));
       const cx=c?c.cx:N/2, cy=c?c.cy:N/2;
       const ox=Math.max(0,Math.min(N-src, cx-src/2)), oy=Math.max(0,Math.min(N-src, cy-src/2));
       monCtx.fillStyle='#06080e'; monCtx.fillRect(0,0,256,256);
