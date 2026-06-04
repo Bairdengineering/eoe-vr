@@ -1831,25 +1831,26 @@
         vec3 p=position+lp*H;
         vec4 mv=modelViewMatrix*vec4(p,1.0); vVP=mv.xyz;
         gl_Position=projectionMatrix*mv; }`;
-    const _memFrag=`uniform sampler2D uField; uniform float uChi; uniform float uLam; uniform float uN; uniform float uRelief; uniform float uColAmp; uniform float uLodBias;
+    const _memFrag=`uniform sampler2D uField; uniform float uChi; uniform float uLam; uniform float uN; uniform float uRelief; uniform float uColAmp; uniform float uLodBias; uniform float uRecFreq;
       varying vec2 vFuv; varying vec3 vN; varying vec3 vVP; varying vec3 vLP;
       float sm(vec2 uv){ vec2 p=uv*uN+0.5; vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); return texture2D(uField,(i+f-0.5)/uN).a; }
       float smT(vec2 uv){ vec2 m=abs(fract(uv*0.5)*2.0-1.0); return sm(m); }
       void main(){
         vec3 lp=normalize(vLP);
-        float th=acos(clamp(lp.z,-1.0,1.0));
-        float ph=atan(lp.y,lp.x);
-        vec2 s=vec2(ph*0.15915494, th/3.14159265);
-        // VIEW-DEPENDENT RECURSION: octaves resolved = how big the surface is on screen.
-        // Closer -> more octaves of the SAME honeycomb fade in. Only computed for visible pixels.
+        // VIEW-DEPENDENT, ISOTROPIC recursion: an even cellular honeycomb evaluated on the 3D surface itself.
+        // No lat/long seam, no pole sectors, no square frames -> the same even structure in every direction.
         float px=max(fwidth(vFuv.x), fwidth(vFuv.y))+1e-7;
         float lod=clamp(-log2(px)-uLodBias, 0.0, 6.0);
-        float rec=0.0, amp=1.0, freq=4.0;
+        vec3 q=lp*uRecFreq;
+        mat3 R=mat3(0.00,0.80,0.60, -0.80,0.36,-0.48, -0.60,-0.48,0.64);   // per-octave rotation -> breaks any axis grid
+        float rec=0.0, amp=1.0;
         for(int k=0;k<6;k++){
           float w=clamp(lod-float(k),0.0,1.0);
-          float sv=smoothstep(0.30,0.70, smT(s*freq + float(k)*vec2(0.37,0.19)));   // crisp each recursive honeycomb cell (gold rim / blue pore)
-          rec += amp*w*(sv-0.5);
-          amp*=0.6; freq*=2.0; }
+          float v=(sin(q.x)*sin(q.y)+sin(q.y)*sin(q.z)+sin(q.z)*sin(q.x))*0.33333;   // rounded, isotropic cells
+          v=smoothstep(-0.22,0.22,v)-0.5;                                            // crisp pore / rim, zero-mean
+          rec += amp*w*v;
+          amp*=0.6; q=R*q*2.0; }                                                     // rotate + double each octave
+        rec *= (0.45+0.55*sm(vFuv));                                                 // ride the substrate: finer cells where order is high
         float bumpH=rec*uRelief;
         vec3 Nb=normalize(normalize(vN) - vec3(dFdx(bumpH), dFdy(bumpH), 0.0));   // fine relief rides the smooth coarse normal
         vec3 V=normalize(-vVP);
@@ -1861,7 +1862,7 @@
         vec3 col=ramp*(0.32+0.9*lit)+ramp*fres*0.5;
         gl_FragColor=vec4(col,1.0); }`;
     function makeMembraneMat(){ return new THREE.ShaderMaterial({
-      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uRelief:{value:0.5}, uColAmp:{value:0.6}, uLodBias:{value:8.0}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
+      uniforms:{ uField:{value:fieldTex}, uCenter:{value:new THREE.Vector2(0.5,0.5)}, uW:{value:0.2}, uDisp:{value:0.12}, uRelief:{value:0.5}, uColAmp:{value:0.6}, uLodBias:{value:8.0}, uRecFreq:{value:30.0}, uN:{value:AQ.N}, uChi:{value:CELL.chi}, uLam:{value:0.1} },
       extensions:{derivatives:true},
       vertexShader:_memVert, fragmentShader:_memFrag, side:THREE.FrontSide }); }
     const _memGeo=new THREE.SphereGeometry(1,256,192);   // one shared high-res sphere -> facets vanish, cheap (geometry reused by all cells)
