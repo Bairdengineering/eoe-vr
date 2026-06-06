@@ -1,0 +1,171 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>EoE · Volume · Step 1 — placement from the law</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{ --bg:#070a10; --panel:#0d121cee; --edge:#26324a; --ink:#cdd9ef; --dim:#6f86aa; --gold:#ecb74e; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
+    font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;color:var(--ink)}
+  #c{position:fixed;inset:0;display:block}
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--edge);border-radius:10px;
+    padding:12px 14px;backdrop-filter:blur(6px);font-size:12px;line-height:1.5}
+  #title{left:18px;top:16px;max-width:340px}
+  #title h1{margin:0 0 4px;font-size:13px;letter-spacing:.14em;color:var(--gold);font-weight:600}
+  #title .rule{color:var(--dim);font-size:11px;margin-top:6px}
+  #legend{left:18px;bottom:16px;max-width:320px}
+  #legend .row{display:flex;align-items:center;gap:8px;margin:2px 0}
+  #legend .sw{width:11px;height:11px;border-radius:2px;flex:0 0 auto}
+  #ctl{right:18px;top:16px;width:230px}
+  #ctl label{display:block;color:var(--dim);font-size:11px;margin-bottom:4px}
+  #ctl input{width:100%}
+  .big{color:var(--gold);font-size:16px}
+  .k{color:var(--dim)}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="title" class="panel">
+  <h1>ENGINE OF EMERGENCE · VOLUME</h1>
+  <div>Step 1 — closures placed by the law, not by hand.</div>
+  <div class="rule">rule: a closure holds at radius r iff &lambda;(r) &lt; its measured ceiling.<br/>
+  &lambda; rises inward with compression. colour = compression window (robustness).<br/>
+  the glow shows the medium; the manifest decides what holds.</div>
+</div>
+<div id="ctl" class="panel">
+  <label>compression &nbsp;(scales &lambda;)&nbsp; — <span id="cv">1.00&times;</span></label>
+  <input id="comp" type="range" min="0.7" max="1.6" step="0.01" value="1.0"/>
+  <div style="margin-top:10px"><span class="big" id="cnt">0</span> <span class="k">closures holding</span></div>
+  <div class="k" id="voidnote" style="margin-top:6px"></div>
+  <div class="k" style="margin-top:8px">drag to orbit · wheel to zoom</div>
+  <div class="k" style="margin-top:6px">on Quest Pro: tap <span style="color:var(--gold)">ENTER VR</span> (needs an https url) · right stick scales</div>
+</div>
+<div id="legend" class="panel"></div>
+
+<script>
+const SPECIES = [{"k": "H2O", "name": "Water", "formula": "H2O", "M": 0.8415, "ceil": 1.0622}, {"k": "CH4", "name": "Methane", "formula": "CH4", "M": 0.851, "ceil": 1.1542}, {"k": "NH3", "name": "Ammonia", "formula": "NH3", "M": 0.8448, "ceil": 1.1391}, {"k": "CO2", "name": "Carbon dioxide", "formula": "CO2", "M": 0.8605, "ceil": 1.3266}, {"k": "O2", "name": "Oxygen", "formula": "O2", "M": 0.8576, "ceil": 1.3247}, {"k": "C6H6", "name": "Benzene", "formula": "C6H6", "M": 0.8996, "ceil": 2.8}, {"k": "C2H6O", "name": "Ethanol", "formula": "C2H6O", "M": 0.8868, "ceil": 2.8}, {"k": "C2H4O2", "name": "Acetic acid", "formula": "C2H4O2", "M": 0.8882, "ceil": 2.8}, {"k": "C5H5N5", "name": "Adenine", "formula": "C5H5N5", "M": 0.9154, "ceil": 2.8}, {"k": "C2H5NO2", "name": "Glycine", "formula": "C2H5NO2", "M": 0.8961, "ceil": 2.8}];
+const LAM_MIN=0.80, LAM_MAX=3.20, P=1.30, R=6.0, N=22000;
+
+// ---- colour = compression window (derived from a measured substrate quantity) ----
+const ceils = SPECIES.map(s=>s.ceil);
+const cMin=Math.min(...ceils), cMax=Math.max(...ceils);
+function ramp(t){ // fragile(blue) -> mid(purple) -> robust(gold)
+  const a=[0x6f,0xb0,0xe0], b=[0xb0,0x7f,0xd0], g=[0xec,0xb7,0x4e];
+  let p,q,u; if(t<0.5){p=a;q=b;u=t/0.5;}else{p=b;q=g;u=(t-0.5)/0.5;}
+  return [ (p[0]+(q[0]-p[0])*u)/255, (p[1]+(q[1]-p[1])*u)/255, (p[2]+(q[2]-p[2])*u)/255 ];
+}
+const lamOf = rn => LAM_MIN + (LAM_MAX-LAM_MIN)*Math.pow(1-rn, P);
+
+// ---- build the population from the law ----
+const pos=new Float32Array(N*3), col=new Float32Array(N*3), aCeil=new Float32Array(N), aR=new Float32Array(N);
+const rnArr=new Float32Array(N), ceilArr=new Float32Array(N);
+for(let i=0;i<N;i++){
+  const rn=Math.cbrt(Math.random());                 // uniform in volume; rn:0 core ->1 surface
+  let x=0,y=0,z=0,L=0; do{ x=Math.random()*2-1; y=Math.random()*2-1; z=Math.random()*2-1; L=x*x+y*y+z*z; }while(L>1||L===0);
+  const inv=1/Math.sqrt(L);
+  pos[i*3]=x*inv*rn*R; pos[i*3+1]=y*inv*rn*R; pos[i*3+2]=z*inv*rn*R;
+  const sp=SPECIES[(Math.random()*SPECIES.length)|0];
+  const c=ramp((sp.ceil-cMin)/(cMax-cMin||1));
+  col[i*3]=c[0]; col[i*3+1]=c[1]; col[i*3+2]=c[2];
+  aCeil[i]=sp.ceil; aR[i]=rn; rnArr[i]=rn; ceilArr[i]=sp.ceil;
+}
+
+// ---- three.js ----
+const cv=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+renderer.xr.enabled=true; try{ renderer.xr.setFoveation(1.0); }catch(e){}  // fixed foveation on Quest
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,200); camera.position.set(0,0,18);
+
+const geo=new THREE.BufferGeometry();
+geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+geo.setAttribute('aColor',new THREE.BufferAttribute(col,3));
+geo.setAttribute('aCeil',new THREE.BufferAttribute(aCeil,1));
+geo.setAttribute('aR',new THREE.BufferAttribute(aR,1));
+const mat=new THREE.ShaderMaterial({
+  uniforms:{ uCompress:{value:1.0}, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:5.5} },
+  vertexShader:`
+    attribute vec3 aColor; attribute float aCeil; attribute float aR;
+    uniform float uCompress,uLamMin,uLamMax,uP,uSize;
+    varying vec3 vColor; varying float vHold;
+    void main(){
+      float lam=(uLamMin+(uLamMax-uLamMin)*pow(1.0-aR,uP))*uCompress;
+      vHold = aCeil>lam ? 1.0 : 0.0;
+      vColor=aColor;
+      vec4 mv=modelViewMatrix*vec4(position,1.0);
+      gl_PointSize=uSize*vHold*(300.0/-mv.z);
+      gl_Position=projectionMatrix*mv;
+    }`,
+  fragmentShader:`
+    varying vec3 vColor; varying float vHold;
+    void main(){
+      vec2 d=gl_PointCoord-vec2(0.5); float r=length(d);
+      if(r>0.5) discard;
+      float a=smoothstep(0.5,0.0,r)*vHold*0.85;
+      gl_FragColor=vec4(vColor,a);
+    }`,
+  transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
+});
+const points=new THREE.Points(geo,mat); scene.add(points);
+// faint shell + void-core marker
+scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.SphereGeometry(R,24,16)),
+  new THREE.LineBasicMaterial({color:0x26324a,transparent:true,opacity:0.35})));
+
+// ---- interaction: manual orbit ----
+let rx=0.4, ry=0.6, dragging=false, px=0, py=0, autorot=true;
+cv.addEventListener('pointerdown',e=>{dragging=true;autorot=false;px=e.clientX;py=e.clientY;});
+addEventListener('pointerup',()=>dragging=false);
+addEventListener('pointermove',e=>{ if(!dragging)return; ry+=(e.clientX-px)*0.005; rx+=(e.clientY-py)*0.005; px=e.clientX; py=e.clientY; });
+cv.addEventListener('wheel',e=>{ camera.position.z=Math.max(9,Math.min(40,camera.position.z+e.deltaY*0.02)); e.preventDefault(); },{passive:false});
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+// ---- compression control + live holding count (re-applies the SAME rule) ----
+const comp=document.getElementById('comp'), cv2=document.getElementById('cv'), cnt=document.getElementById('cnt');
+function recount(){
+  const s=mat.uniforms.uCompress.value; let h=0;
+  for(let i=0;i<N;i++){ const lam=lamOf(rnArr[i])*s; if(ceilArr[i]>lam) h++; }
+  cnt.textContent=h.toLocaleString();
+}
+comp.addEventListener('input',()=>{ const s=parseFloat(comp.value); mat.uniforms.uCompress.value=s; cv2.textContent=s.toFixed(2)+'\u00d7'; recount(); });
+
+// ---- legend (color -> ceiling -> species), built from the law ----
+const leg=document.getElementById('legend');
+let html='<div style="color:var(--gold);margin-bottom:6px">species placed (colour = compression window)</div>';
+SPECIES.slice().sort((a,b)=>a.ceil-b.ceil).forEach(s=>{
+  const c=ramp((s.ceil-cMin)/(cMax-cMin||1)); const hex=`rgb(${(c[0]*255)|0},${(c[1]*255)|0},${(c[2]*255)|0})`;
+  html+=`<div class="row"><span class="sw" style="background:${hex}"></span>${s.formula} <span class="k">&lambda;*=${s.ceil.toFixed(2)} · M=${s.M.toFixed(2)}</span></div>`;
+});
+leg.innerHTML=html;
+document.getElementById('voidnote').textContent='void core: \u03bb exceeds every measured ceiling \u2014 raw medium.';
+recount();
+
+// ---- WebXR (Quest Pro): stand inside the substrate ----
+let session=null;
+try{ if(navigator.xr){ navigator.xr.isSessionSupported('immersive-vr').then(ok=>{ if(!ok) return;
+  const b=document.createElement('button'); b.textContent='ENTER VR'; b.id='vrb';
+  b.style.cssText='position:fixed;right:18px;bottom:18px;z-index:30;padding:12px 20px;'+
+    "font-family:inherit;font-size:13px;letter-spacing:.12em;color:#070a10;background:#ecb74e;"+
+    'border:none;border-radius:10px;cursor:pointer';
+  b.onclick=async()=>{
+    if(session){ session.end(); return; }
+    session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor','hand-tracking']});
+    await renderer.xr.setSession(session); b.textContent='EXIT VR';
+    points.scale.setScalar(0.5); points.position.y=1.3; mat.uniforms.uSize.value=1.6;  // envelop viewer; VR point size
+    session.addEventListener('end',()=>{ session=null; b.textContent='ENTER VR';
+      points.scale.setScalar(1.0); points.position.y=0; mat.uniforms.uSize.value=5.5; });
+  };
+  document.body.appendChild(b);
+}); } }catch(e){}
+
+function readThumbstick(){                              // right thumbstick scales the substrate (inflate/shrink)
+  const s=renderer.xr.getSession(); if(!s) return;
+  for(const src of s.inputSources){ const gp=src.gamepad;
+    if(gp && gp.axes && gp.axes.length>=4){ const y=gp.axes[3];
+      if(Math.abs(y)>0.15){ const sc=THREE.MathUtils.clamp(points.scale.x*(1-y*0.012),0.15,2.5); points.scale.setScalar(sc); } } }
+}
+
+// ---- render loop (setAnimationLoop drives both desktop and VR) ----
+renderer.setAnimationLoop(()=>{
+  if(renderer.xr.isPresenting){ ry+=0.0008; points.rotation.y=ry; readThumbstick(); }
+  else { if(autorot) ry+=0.0016; points.rotation.y=ry; points.rotation.x=rx; }
+  renderer.render(scene,camera);
+});
+</script></body></html>
