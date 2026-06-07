@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>EoE · Volume · Step 2 — coupling (condensation)</title>
+<title>EoE · Volume · the living broth (VR demo)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   :root{ --bg:#070a10; --panel:#0d121cee; --edge:#26324a; --ink:#cdd9ef; --dim:#6f86aa; --gold:#ecb74e; }
@@ -28,6 +28,7 @@
 <div id="title" class="panel">
   <h1>ENGINE OF EMERGENCE · VOLUME</h1>
   <div>Step 2 — closures placed by the law; glycine couples into chains.</div>
+  <div class="rule" style="color:var(--ink)">a primordial broth — the medium compresses inward; a closure holds only where its measured window covers the local squeeze; glycine condenses into peptides, releasing water.</div>
   <div class="rule">rule: a closure holds at radius r iff &lambda;(r) &lt; its measured ceiling.<br/>
   &lambda; rises inward with compression. colour = compression window (robustness).<br/>
   the glow shows the medium; the manifest decides what holds.</div>
@@ -41,8 +42,11 @@
   <div class="k" style="color:var(--gold);margin-bottom:4px">coupling — glycine condensation</div>
   <div style="margin-top:2px"><span class="big" id="dm">+0.0000</span> <span class="k">cumulative &Delta;M (measured)</span></div>
   <div class="k" style="margin-top:6px">longest chain: <span id="lc" style="color:var(--gold)">1</span> · couplings: <span id="cc">0</span></div>
-  <div style="margin-top:8px"><button id="reactb">REACT</button> &nbsp;<label style="display:inline-block;color:var(--dim)">auto <input id="auto" type="checkbox"/></label></div>
-  <div class="k" style="margin-top:6px">gly+gly &rarr; gold chain + blue H2O · the law keeps the water only where water holds</div>
+  <div style="margin-top:8px"><button id="reactb">REACT</button>
+    &nbsp;<label style="display:inline-block;color:var(--dim)">auto <input id="auto" type="checkbox" checked/></label>
+    &nbsp;<label style="display:inline-block;color:var(--dim)">breathe <input id="breathe" type="checkbox" checked/></label></div>
+  <div class="k" style="margin-top:6px">compression tide &plusmn;10% / 10s <span style="color:var(--dim)">(imposed environmental oscillation — not measured)</span></div>
+  <div class="k" style="margin-top:6px">gly+gly &rarr; gold chain + blue H2O · water drifts out to the calm shells where it holds</div>
   <div class="k" style="margin-top:8px">drag to orbit · wheel to zoom</div>
   <div class="k" style="margin-top:6px">on Quest Pro: tap <span style="color:var(--gold)">ENTER VR</span> (needs an https url) · right stick scales</div>
 </div>
@@ -92,10 +96,11 @@ geo.setAttribute('aR',new THREE.BufferAttribute(aR,1));
 // shared shader: same hold rule + clamped point size (the hard-won VR fix) for medium AND reactor
 const VERT=`
     attribute vec3 aColor; attribute float aCeil; attribute float aR;
-    uniform float uCompress,uLamMin,uLamMax,uP,uSize;
+    uniform float uCompress,uLamMin,uLamMax,uP,uSize,uTime,uBreathe;
     varying vec3 vColor; varying float vHold;
     void main(){
-      float lam=(uLamMin+(uLamMax-uLamMin)*pow(1.0-aR,uP))*uCompress;
+      float tide = 1.0 + uBreathe*0.10*sin(uTime*0.6283185307);   // compression tide: imposed +-10%, 10s period
+      float lam=(uLamMin+(uLamMax-uLamMin)*pow(1.0-aR,uP))*uCompress*tide;
       vHold = aCeil>lam ? 1.0 : 0.0;
       vColor=aColor;
       vec4 mv=modelViewMatrix*vec4(position,1.0);
@@ -112,7 +117,7 @@ const FRAG=`
       gl_FragColor=vec4(vColor,a);
     }`;
 const mat=new THREE.ShaderMaterial({
-  uniforms:{ uCompress:{value:1.0}, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:2.0} },
+  uniforms:{ uCompress:{value:1.0}, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:2.0}, uTime:{value:0.0}, uBreathe:{value:1.0} },
   vertexShader:VERT, fragmentShader:FRAG,
   transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
 });
@@ -125,6 +130,13 @@ const points=new THREE.Points(geo,mat); scene.add(points);
 // brightness (alpha stays exactly 0.5; size stays clamped — no additive blowout in VR).
 const DM=[0.0277,0.0106,0.0049,0.0035];   // measured ΔM per step: 1→2,2→3,3→4,4→5 (all Welch-t significant)
 const REACT_N=320, SP=0.42, MAXN=5;        // MAXN: we have data only to n=5 — stop there
+// ---- "alive" demo pacing (continuous broth + water drift) ----
+const CAP=1400;                            // fixed buffer capacity (recycling keeps the live count well under this)
+const POOL_MIN=40, REPLENISH=50;           // when free eligible glycine runs low, add fresh monomers
+const MAX_DONE=28;                          // keep this many finished n=5 peptides on screen; older ones dissolve back (steady state)
+const WATER_CAP=450;                        // bound persisted water so a long demo never fills the buffer (oldest evaporates)
+const REACT_INTERVAL=0.30;                 // seconds between auto couplings (~3/s): a steady flow, not a burst
+const WV=1.2, WLIFE=1.8;                    // water drift speed (units/s) + lifetime (s) to reach a holding shell, else it lets go
 const glySpec=SPECIES.find(s=>s.k==='C2H5NO2'), waterSpec=SPECIES.find(s=>s.k==='H2O');
 const glyCeil=glySpec.ceil, waterCeil=waterSpec.ceil;   // chains hold to the cap, same λ* as glycine
 const tOf=ce=>(ce-cMin)/(cMax-cMin||1);
@@ -132,7 +144,7 @@ const glyColor=ramp(tOf(glyCeil)), waterColor=ramp(tOf(waterCeil));   // color =
 const len3=o=>Math.hypot(o.x,o.y,o.z);
 function randDir(){let x,y,z,L;do{x=Math.random()*2-1;y=Math.random()*2-1;z=Math.random()*2-1;L=x*x+y*y+z*z;}while(L>1||L===0);const inv=1/Math.sqrt(L);return [x*inv,y*inv,z*inv];}
 
-let units=[], chains=[], cumDM=0, couplings=0, longest=1;
+let units=[], chains=[], cumDM=0, couplings=0, longest=1, tNow=0;
 
 function newGly(){
   const d=randDir(), rn=0.35+Math.random()*0.6;            // seed within glycine's holding shell
@@ -141,36 +153,47 @@ function newGly(){
 for(let i=0;i<REACT_N;i++) units.push(newGly());
 
 const rgeo=new THREE.BufferGeometry();
+// fixed-capacity buffers updated in place each frame (water drifts every frame; cheap, no GC churn)
+const rpos=new Float32Array(CAP*3), rcol=new Float32Array(CAP*3), rce=new Float32Array(CAP), rrn=new Float32Array(CAP);
+rgeo.setAttribute('position',new THREE.BufferAttribute(rpos,3));
+rgeo.setAttribute('aColor',new THREE.BufferAttribute(rcol,3));
+rgeo.setAttribute('aCeil',new THREE.BufferAttribute(rce,1));
+rgeo.setAttribute('aR',new THREE.BufferAttribute(rrn,1));
 const rmat=new THREE.ShaderMaterial({
-  uniforms:{ uCompress:mat.uniforms.uCompress, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:3.6} },
+  uniforms:{ uCompress:mat.uniforms.uCompress, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:3.6}, uTime:mat.uniforms.uTime, uBreathe:mat.uniforms.uBreathe },
   vertexShader:VERT, fragmentShader:FRAG, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
-});  // shares uCompress object → the slider drives both populations
+});  // shares uCompress/uTime/uBreathe objects → slider + tide drive both populations
 const rpoints=new THREE.Points(rgeo,rmat); points.add(rpoints);   // child of medium → inherits orbit + VR scale
 const lgeo=new THREE.BufferGeometry();
+const lseg=new Float32Array(CAP*6);  // up to CAP segments (2 verts each); recycling keeps it bounded
+lgeo.setAttribute('position',new THREE.BufferAttribute(lseg,3));
 const lmat=new THREE.LineBasicMaterial({color:0xecb74e, transparent:true, opacity:0.55, depthWrite:false}); // normal blend (no additive blowout)
 const links=new THREE.LineSegments(lgeo,lmat); points.add(links);
 
-function rebuildReactor(){
-  const n=units.length;
-  const p=new Float32Array(n*3), c=new Float32Array(n*3), ce=new Float32Array(n), rr=new Float32Array(n);
-  for(let i=0;i<n;i++){ const u=units[i], col=u.kind==='water'?waterColor:glyColor;
-    p[i*3]=u.x; p[i*3+1]=u.y; p[i*3+2]=u.z;
-    c[i*3]=col[0]; c[i*3+1]=col[1]; c[i*3+2]=col[2];
-    ce[i]=u.ceil; rr[i]=u.rn; }
-  rgeo.setAttribute('position',new THREE.BufferAttribute(p,3));
-  rgeo.setAttribute('aColor',new THREE.BufferAttribute(c,3));
-  rgeo.setAttribute('aCeil',new THREE.BufferAttribute(ce,1));
-  rgeo.setAttribute('aR',new THREE.BufferAttribute(rr,1));
-  const seg=[];
-  for(const ch of chains) for(let i=0;i+1<ch.members.length;i++){ const a=ch.members[i],b=ch.members[i+1]; seg.push(a.x,a.y,a.z,b.x,b.y,b.z); }
-  lgeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(seg),3));
+function syncPoints(){           // write all unit attributes; called every frame (water moves)
+  const n=Math.min(units.length,CAP);
+  for(let i=0;i<n;i++){ const u=units[i], c=u.kind==='water'?waterColor:glyColor;
+    rpos[i*3]=u.x; rpos[i*3+1]=u.y; rpos[i*3+2]=u.z;
+    rcol[i*3]=c[0]; rcol[i*3+1]=c[1]; rcol[i*3+2]=c[2];
+    rce[i]=u.ceil; rrn[i]=u.rn; }
+  rgeo.setDrawRange(0,n);
+  rgeo.attributes.position.needsUpdate=rgeo.attributes.aColor.needsUpdate=rgeo.attributes.aCeil.needsUpdate=rgeo.attributes.aR.needsUpdate=true;
+}
+function syncLines(){            // rebuild connectors; only on structural change (couple/retire)
+  let s=0;
+  for(const ch of chains) for(let i=0;i+1<ch.members.length;i++){ const a=ch.members[i],b=ch.members[i+1];
+    if(s+6>lseg.length) break;
+    lseg[s++]=a.x; lseg[s++]=a.y; lseg[s++]=a.z; lseg[s++]=b.x; lseg[s++]=b.y; lseg[s++]=b.z; }
+  lgeo.setDrawRange(0,s/3);
+  lgeo.attributes.position.needsUpdate=true;
 }
 
 function nearest(u,arr){ let best=null,bd=Infinity; for(const o of arr){ if(o===u)continue; const dx=o.x-u.x,dy=o.y-u.y,dz=o.z-u.z,d=dx*dx+dy*dy+dz*dz; if(d<bd){bd=d;best=o;} } return best; }
 function emitWater(ax,ay,az,bx,by,bz){
   const o=randDir(), x=(ax+bx)/2+o[0]*0.3, y=(ay+by)/2+o[1]*0.3, z=(az+bz)/2+o[2]*0.3;
-  // a real H2O particle at the coupling site — no special-casing; the hold rule decides its fate
-  units.push({x,y,z, rn:Math.hypot(x,y,z)/R, ceil:waterCeil, kind:'water', chain:null});
+  // a real H2O particle at the coupling site — no special-casing; the hold rule decides its fate.
+  // it drifts radially outward (water seeks where it holds); if it can't reach a holding shell in time, it lets go.
+  units.push({x,y,z, rn:Math.hypot(x,y,z)/R, ceil:waterCeil, kind:'water', chain:null, settled:false, born:tNow});
 }
 
 // one coupling: law → stage. Extend the shortest live chain, else nucleate a new pair.
@@ -204,12 +227,55 @@ function react(){
   return false;
 }
 
+// ---- recycle / replenish so the broth keeps living through a demo (acknowledged: a reset, not measured) ----
+function retireOldestMaxChain(){               // a finished n=5 peptide dissolves back into the medium
+  const idx=chains.findIndex(c=>c.members.length>=MAXN);
+  if(idx<0) return false;
+  const dead=new Set(chains[idx].members);
+  units=units.filter(u=>!dead.has(u));
+  chains.splice(idx,1);
+  return true;
+}
+function freeCount(){
+  const comp=mat.uniforms.uCompress.value; let n=0;
+  for(const u of units) if(u.kind==='gly' && u.chain===null && u.ceil>lamOf(u.rn)*comp) n++;
+  return n;
+}
+function pruneWater(){                          // oldest persisted water evaporates so the buffer never fills
+  let w=0; for(const u of units) if(u.kind==='water') w++;
+  while(w>WATER_CAP){
+    const idx=units.findIndex(u=>u.kind==='water'); if(idx<0) break;   // units are insertion-ordered → oldest first
+    units.splice(idx,1); w--;
+  }
+}
+function ensurePool(){                          // keep a true steady state: bound finished peptides + water, refill monomers
+  pruneWater();
+  let done=0; for(const c of chains) if(c.members.length>=MAXN) done++;
+  while(done>MAX_DONE && retireOldestMaxChain()) done--;   // oldest finished peptides dissolve back into the medium
+  if(freeCount()>=POOL_MIN || units.length>=CAP-REPLENISH-4) return false;
+  for(let i=0;i<REPLENISH;i++) units.push(newGly());
+  return true;
+}
+
+// ---- water drift: radially outward toward the calm shells where it holds; else it lets go ----
+function driftWater(dt){
+  const comp=mat.uniforms.uCompress.value;
+  for(let i=units.length-1;i>=0;i--){ const w=units[i];
+    if(w.kind!=='water' || w.settled) continue;
+    if(w.ceil > lamOf(w.rn)*comp){ w.settled=true; continue; }   // reached a holding radius — it persists
+    const d=len3(w)||1e-6, v=WV*dt;
+    w.x+=(w.x/d)*v; w.y+=(w.y/d)*v; w.z+=(w.z/d)*v; w.rn=len3(w)/R;   // outward = law-derived (water seeks where it holds)
+    if(tNow-w.born>WLIFE) units.splice(i,1);                     // couldn't reach a holding shell in time — lets go
+  }
+}
+
 const dmEl=document.getElementById('dm'), lcEl=document.getElementById('lc'), ccEl=document.getElementById('cc');
-const reactBtn=document.getElementById('reactb'), autoChk=document.getElementById('auto');
+const reactBtn=document.getElementById('reactb'), autoChk=document.getElementById('auto'), breatheChk=document.getElementById('breathe');
 function updateHUD(){ dmEl.textContent='+'+cumDM.toFixed(4); lcEl.textContent=longest; ccEl.textContent=couplings; }
-function step(){ if(react()){ rebuildReactor(); updateHUD(); } }
+function step(){ const grew=ensurePool(); if(react()||grew){ syncLines(); updateHUD(); } }   // one coupling (manual / VR trigger)
 reactBtn.addEventListener('click',step);
-rebuildReactor(); updateHUD();
+breatheChk.addEventListener('change',()=>{ mat.uniforms.uBreathe.value=breatheChk.checked?1.0:0.0; });
+syncPoints(); syncLines(); updateHUD();
 
 // ---- interaction: manual orbit ----
 let rx=0.4, ry=0.6, dragging=false, px=0, py=0, autorot=true;
@@ -266,11 +332,16 @@ function readThumbstick(){                              // right thumbstick scal
 }
 
 // ---- render loop (setAnimationLoop drives both desktop and VR) ----
-let afCount=0;
-renderer.setAnimationLoop(()=>{
-  if(renderer.xr.isPresenting){ readThumbstick(); }   // static world in VR — look around with your head
+let lastT=0, reactAcc=0;
+renderer.setAnimationLoop((time)=>{
+  tNow=(time||0)*0.001;
+  let dt=tNow-lastT; lastT=tNow; if(dt<0||dt>0.1) dt=0.016;   // clamp first frame / hitches → frame-rate independent
+  mat.uniforms.uTime.value=tNow;                              // shared → tide breathes for medium + reactor (no viewer motion)
+  if(renderer.xr.isPresenting){ readThumbstick(); }           // static world in VR — look around with your head
   else { if(autorot) ry+=0.0016; points.rotation.y=ry; points.rotation.x=rx; }
-  if(autoChk.checked && (++afCount % 45)===0) step();  // slow auto-step (~0.7s/coupling at 60fps)
+  if(autoChk.checked){ reactAcc+=dt; let g=0; while(reactAcc>=REACT_INTERVAL && g++<6){ reactAcc-=REACT_INTERVAL; step(); } }  // steady flow, not a burst
+  driftWater(dt);                                             // water creeps toward the calm shells (or lets go)
+  syncPoints();                                               // push moved/added/removed units to the GPU
   renderer.render(scene,camera);
 });
 </script></body></html>
