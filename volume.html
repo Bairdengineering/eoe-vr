@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>EoE · Volume · Step 1 — placement from the law</title>
+<title>EoE · Volume · Step 2 — coupling (condensation)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   :root{ --bg:#070a10; --panel:#0d121cee; --edge:#26324a; --ink:#cdd9ef; --dim:#6f86aa; --gold:#ecb74e; }
@@ -17,14 +17,17 @@
   #legend .sw{width:11px;height:11px;border-radius:2px;flex:0 0 auto}
   #ctl{right:18px;top:16px;width:230px}
   #ctl label{display:block;color:var(--dim);font-size:11px;margin-bottom:4px}
-  #ctl input{width:100%}
+  #ctl input[type=range]{width:100%}
+  #ctl input[type=checkbox]{width:auto;vertical-align:middle}
+  #ctl button{font-family:inherit;font-size:11px;letter-spacing:.1em;color:#070a10;
+    background:var(--gold);border:none;border-radius:6px;padding:6px 14px;cursor:pointer}
   .big{color:var(--gold);font-size:16px}
   .k{color:var(--dim)}
 </style></head><body>
 <canvas id="c"></canvas>
 <div id="title" class="panel">
   <h1>ENGINE OF EMERGENCE · VOLUME</h1>
-  <div>Step 1 — closures placed by the law, not by hand.</div>
+  <div>Step 2 — closures placed by the law; glycine couples into chains.</div>
   <div class="rule">rule: a closure holds at radius r iff &lambda;(r) &lt; its measured ceiling.<br/>
   &lambda; rises inward with compression. colour = compression window (robustness).<br/>
   the glow shows the medium; the manifest decides what holds.</div>
@@ -34,6 +37,12 @@
   <input id="comp" type="range" min="0.7" max="1.6" step="0.01" value="1.0"/>
   <div style="margin-top:10px"><span class="big" id="cnt">0</span> <span class="k">closures holding</span></div>
   <div class="k" id="voidnote" style="margin-top:6px"></div>
+  <hr style="border:none;border-top:1px solid var(--edge);margin:10px 0"/>
+  <div class="k" style="color:var(--gold);margin-bottom:4px">coupling — glycine condensation</div>
+  <div style="margin-top:2px"><span class="big" id="dm">+0.0000</span> <span class="k">cumulative &Delta;M (measured)</span></div>
+  <div class="k" style="margin-top:6px">longest chain: <span id="lc" style="color:var(--gold)">1</span> · couplings: <span id="cc">0</span></div>
+  <div style="margin-top:8px"><button id="reactb">REACT</button> &nbsp;<label style="display:inline-block;color:var(--dim)">auto <input id="auto" type="checkbox"/></label></div>
+  <div class="k" style="margin-top:6px">gly+gly &rarr; gold chain + blue H2O · the law keeps the water only where water holds</div>
   <div class="k" style="margin-top:8px">drag to orbit · wheel to zoom</div>
   <div class="k" style="margin-top:6px">on Quest Pro: tap <span style="color:var(--gold)">ENTER VR</span> (needs an https url) · right stick scales</div>
 </div>
@@ -80,9 +89,8 @@ geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
 geo.setAttribute('aColor',new THREE.BufferAttribute(col,3));
 geo.setAttribute('aCeil',new THREE.BufferAttribute(aCeil,1));
 geo.setAttribute('aR',new THREE.BufferAttribute(aR,1));
-const mat=new THREE.ShaderMaterial({
-  uniforms:{ uCompress:{value:1.0}, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:2.0} },
-  vertexShader:`
+// shared shader: same hold rule + clamped point size (the hard-won VR fix) for medium AND reactor
+const VERT=`
     attribute vec3 aColor; attribute float aCeil; attribute float aR;
     uniform float uCompress,uLamMin,uLamMax,uP,uSize;
     varying vec3 vColor; varying float vHold;
@@ -94,18 +102,114 @@ const mat=new THREE.ShaderMaterial({
       float dist=max(-mv.z,0.5);
       gl_PointSize=vHold*uSize*clamp(40.0/dist,0.8,3.0);   // clamped: never blows up inside
       gl_Position=projectionMatrix*mv;
-    }`,
-  fragmentShader:`
+    }`;
+const FRAG=`
     varying vec3 vColor; varying float vHold;
     void main(){
       vec2 d=gl_PointCoord-vec2(0.5); float r=length(d);
       if(r>0.5) discard;
       float a=smoothstep(0.5,0.0,r)*vHold*0.5;
       gl_FragColor=vec4(vColor,a);
-    }`,
+    }`;
+const mat=new THREE.ShaderMaterial({
+  uniforms:{ uCompress:{value:1.0}, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:2.0} },
+  vertexShader:VERT, fragmentShader:FRAG,
   transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
 });
 const points=new THREE.Points(geo,mat); scene.add(points);
+
+// ================= STEP 2: COUPLING (measured glycine condensation) =================
+// The static 22k stays the medium. A small reactor population of glycine agents pairs,
+// chains, and emits water. The law (shared uCompress) decides holding; coupling fires only
+// from the rule + the measured ladder below. Composition (connectors) is the signal — not
+// brightness (alpha stays exactly 0.5; size stays clamped — no additive blowout in VR).
+const DM=[0.0277,0.0106,0.0049,0.0035];   // measured ΔM per step: 1→2,2→3,3→4,4→5 (all Welch-t significant)
+const REACT_N=320, SP=0.42, MAXN=5;        // MAXN: we have data only to n=5 — stop there
+const glySpec=SPECIES.find(s=>s.k==='C2H5NO2'), waterSpec=SPECIES.find(s=>s.k==='H2O');
+const glyCeil=glySpec.ceil, waterCeil=waterSpec.ceil;   // chains hold to the cap, same λ* as glycine
+const tOf=ce=>(ce-cMin)/(cMax-cMin||1);
+const glyColor=ramp(tOf(glyCeil)), waterColor=ramp(tOf(waterCeil));   // color = lam_ceiling, unchanged
+const len3=o=>Math.hypot(o.x,o.y,o.z);
+function randDir(){let x,y,z,L;do{x=Math.random()*2-1;y=Math.random()*2-1;z=Math.random()*2-1;L=x*x+y*y+z*z;}while(L>1||L===0);const inv=1/Math.sqrt(L);return [x*inv,y*inv,z*inv];}
+
+let units=[], chains=[], cumDM=0, couplings=0, longest=1;
+
+function newGly(){
+  const d=randDir(), rn=0.35+Math.random()*0.6;            // seed within glycine's holding shell
+  return {x:d[0]*rn*R, y:d[1]*rn*R, z:d[2]*rn*R, rn, ceil:glyCeil, kind:'gly', chain:null};
+}
+for(let i=0;i<REACT_N;i++) units.push(newGly());
+
+const rgeo=new THREE.BufferGeometry();
+const rmat=new THREE.ShaderMaterial({
+  uniforms:{ uCompress:mat.uniforms.uCompress, uLamMin:{value:LAM_MIN}, uLamMax:{value:LAM_MAX}, uP:{value:P}, uSize:{value:3.6} },
+  vertexShader:VERT, fragmentShader:FRAG, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
+});  // shares uCompress object → the slider drives both populations
+const rpoints=new THREE.Points(rgeo,rmat); points.add(rpoints);   // child of medium → inherits orbit + VR scale
+const lgeo=new THREE.BufferGeometry();
+const lmat=new THREE.LineBasicMaterial({color:0xecb74e, transparent:true, opacity:0.55, depthWrite:false}); // normal blend (no additive blowout)
+const links=new THREE.LineSegments(lgeo,lmat); points.add(links);
+
+function rebuildReactor(){
+  const n=units.length;
+  const p=new Float32Array(n*3), c=new Float32Array(n*3), ce=new Float32Array(n), rr=new Float32Array(n);
+  for(let i=0;i<n;i++){ const u=units[i], col=u.kind==='water'?waterColor:glyColor;
+    p[i*3]=u.x; p[i*3+1]=u.y; p[i*3+2]=u.z;
+    c[i*3]=col[0]; c[i*3+1]=col[1]; c[i*3+2]=col[2];
+    ce[i]=u.ceil; rr[i]=u.rn; }
+  rgeo.setAttribute('position',new THREE.BufferAttribute(p,3));
+  rgeo.setAttribute('aColor',new THREE.BufferAttribute(c,3));
+  rgeo.setAttribute('aCeil',new THREE.BufferAttribute(ce,1));
+  rgeo.setAttribute('aR',new THREE.BufferAttribute(rr,1));
+  const seg=[];
+  for(const ch of chains) for(let i=0;i+1<ch.members.length;i++){ const a=ch.members[i],b=ch.members[i+1]; seg.push(a.x,a.y,a.z,b.x,b.y,b.z); }
+  lgeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(seg),3));
+}
+
+function nearest(u,arr){ let best=null,bd=Infinity; for(const o of arr){ if(o===u)continue; const dx=o.x-u.x,dy=o.y-u.y,dz=o.z-u.z,d=dx*dx+dy*dy+dz*dz; if(d<bd){bd=d;best=o;} } return best; }
+function emitWater(ax,ay,az,bx,by,bz){
+  const o=randDir(), x=(ax+bx)/2+o[0]*0.3, y=(ay+by)/2+o[1]*0.3, z=(az+bz)/2+o[2]*0.3;
+  // a real H2O particle at the coupling site — no special-casing; the hold rule decides its fate
+  units.push({x,y,z, rn:Math.hypot(x,y,z)/R, ceil:waterCeil, kind:'water', chain:null});
+}
+
+// one coupling: law → stage. Extend the shortest live chain, else nucleate a new pair.
+function react(){
+  const comp=mat.uniforms.uCompress.value;
+  const holds=u=> u.ceil > lamOf(u.rn)*comp;                 // eligible iff currently holding
+  const free=units.filter(u=>u.kind==='gly' && u.chain===null && holds(u));
+  const growable=chains.filter(c=>c.members.length<MAXN).sort((a,b)=>a.members.length-b.members.length);
+  if(growable.length){
+    const ch=growable[0], tail=ch.members[ch.members.length-1], m=nearest(tail,free);
+    if(m){
+      const L=ch.members.length;                             // step L→L+1
+      m.x=tail.x+ch.dir[0]*SP; m.y=tail.y+ch.dir[1]*SP; m.z=tail.z+ch.dir[2]*SP; m.rn=len3(m)/R;
+      m.chain=ch; ch.members.push(m);
+      cumDM+=DM[L-1]; couplings++; longest=Math.max(longest,ch.members.length);
+      emitWater(tail.x,tail.y,tail.z,m.x,m.y,m.z);
+      return true;
+    }
+  }
+  if(free.length>=2){
+    const a=free[0], b=nearest(a,free);
+    if(b){
+      const dir=randDir();                                   // step 1→2
+      b.x=a.x+dir[0]*SP; b.y=a.y+dir[1]*SP; b.z=a.z+dir[2]*SP; b.rn=len3(b)/R;
+      const ch={members:[a,b],dir}; a.chain=ch; b.chain=ch; chains.push(ch);
+      cumDM+=DM[0]; couplings++; longest=Math.max(longest,2);
+      emitWater(a.x,a.y,a.z,b.x,b.y,b.z);
+      return true;
+    }
+  }
+  return false;
+}
+
+const dmEl=document.getElementById('dm'), lcEl=document.getElementById('lc'), ccEl=document.getElementById('cc');
+const reactBtn=document.getElementById('reactb'), autoChk=document.getElementById('auto');
+function updateHUD(){ dmEl.textContent='+'+cumDM.toFixed(4); lcEl.textContent=longest; ccEl.textContent=couplings; }
+function step(){ if(react()){ rebuildReactor(); updateHUD(); } }
+reactBtn.addEventListener('click',step);
+rebuildReactor(); updateHUD();
 
 // ---- interaction: manual orbit ----
 let rx=0.4, ry=0.6, dragging=false, px=0, py=0, autorot=true;
@@ -147,6 +251,7 @@ try{ if(navigator.xr){ navigator.xr.isSessionSupported('immersive-vr').then(ok=>
     session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor','hand-tracking']});
     await renderer.xr.setSession(session); b.textContent='EXIT VR';
     points.scale.setScalar(0.5); points.position.y=1.3;  // envelop the viewer
+    session.addEventListener('selectstart',()=>step());  // controller trigger performs one coupling
     session.addEventListener('end',()=>{ session=null; b.textContent='ENTER VR';
       points.scale.setScalar(1.0); points.position.y=0; });
   };
@@ -161,9 +266,11 @@ function readThumbstick(){                              // right thumbstick scal
 }
 
 // ---- render loop (setAnimationLoop drives both desktop and VR) ----
+let afCount=0;
 renderer.setAnimationLoop(()=>{
   if(renderer.xr.isPresenting){ readThumbstick(); }   // static world in VR — look around with your head
   else { if(autorot) ry+=0.0016; points.rotation.y=ry; points.rotation.x=rx; }
+  if(autoChk.checked && (++afCount % 45)===0) step();  // slow auto-step (~0.7s/coupling at 60fps)
   renderer.render(scene,camera);
 });
 </script></body></html>
