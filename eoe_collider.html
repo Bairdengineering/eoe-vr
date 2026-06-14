@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EoE Closure Collider</title>
+<style>
+  :root{ --pos:#f3b13c; --neg:#34c6d6; --neu:#74d6a4; --strain:#e0625a; --ink:#eef3fb; --faint:#5a6884; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:#05070d;color:var(--ink);
+    font-family:"JetBrains Mono",ui-monospace,monospace;overflow:hidden;}
+  #ui{position:fixed;inset:0;pointer-events:none;}
+  #top{position:absolute;top:14px;left:16px;right:16px;display:flex;justify-content:space-between;
+    align-items:flex-start;gap:12px;}
+  h1{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);margin:0;font-weight:500;}
+  #enter{pointer-events:auto;background:#0d1422;color:var(--ink);border:1px solid #1c2740;
+    border-radius:10px;padding:10px 16px;font:inherit;font-size:13px;cursor:pointer;}
+  #enter:hover{border-color:var(--pos);}
+  #panel{position:absolute;left:16px;bottom:16px;background:rgba(10,15,26,.82);border:1px solid #1c2740;
+    border-radius:12px;padding:14px 16px;min-width:260px;pointer-events:auto;}
+  .row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:12px;}
+  .row label{color:var(--faint);width:74px;}
+  button.ctl{pointer-events:auto;background:#0d1422;color:var(--ink);border:1px solid #1c2740;
+    border-radius:8px;padding:6px 11px;font:inherit;font-size:12px;cursor:pointer;}
+  button.ctl:hover{border-color:var(--pos);}
+  input[type=range]{flex:1;accent-color:var(--pos);}
+  #readout{position:absolute;right:16px;bottom:16px;background:rgba(10,15,26,.82);border:1px solid #1c2740;
+    border-radius:12px;padding:14px 16px;min-width:230px;font-size:12px;line-height:1.7;}
+  #readout .k{color:var(--faint);}
+  #verdict{font-size:14px;font-weight:700;margin-bottom:6px;}
+  #hint{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);color:var(--faint);font-size:11px;}
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="top">
+    <h1>EoE&nbsp;·&nbsp;Closure Collider</h1>
+    <button id="enter">Enter VR</button>
+  </div>
+  <div id="panel">
+    <div class="row"><label>mode</label>
+      <button class="ctl" id="mode">PRODUCTION (same)</button></div>
+    <div class="row"><label>beam Σ</label>
+      <input type="range" id="energy" min="0" max="12" step="0.1" value="2">
+      <span id="eval">2.0</span></div>
+    <div class="row"><label>fold A</label><button class="ctl" id="foldA">2</button>
+      <label style="width:auto">fold B</label><button class="ctl" id="foldB">2</button></div>
+    <div class="row">
+      <button class="ctl" id="fire">FIRE ▸</button>
+      <button class="ctl" id="reset">reset</button></div>
+  </div>
+  <div id="readout">
+    <div id="verdict" style="color:var(--faint)">— idle —</div>
+    <div><span class="k">inputs</span> <span id="rIn">(1,2) + (1,2)</span></div>
+    <div><span class="k">product</span> <span id="rProd">—</span></div>
+    <div><span class="k">M</span> <span id="rM">—</span> &nbsp; <span class="k">kind</span> <span id="rKind">—</span></div>
+    <div><span class="k">σ / threshold</span> <span id="rThr">—</span></div>
+    <div><span class="k">lifetime</span> <span id="rLife">—</span></div>
+  </div>
+  <div id="hint">desktop: FIRE button / Space. &nbsp; VR: hold right trigger to charge, release to fire · left trigger toggles mode</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const PI = Math.PI;
+// ---- the model, straight from the session ----
+const Mof   = q => 4/PI - 0.05*q;          // firmed margin line
+const stable= q => Mof(q) > 0;             // q <= 25
+const sigma = q => 0.5*q;                   // stored order / mass proxy
+const isPrime = n => { if(n<2)return false; for(let d=2;d*d<=n;d++) if(n%d===0)return false; return true; };
+const nest  = (a,b) => a*b;                 // nesting composition (derived this session)
+const thr   = (q,a,b) => Math.max(0, sigma(q)-sigma(a)-sigma(b));
+const life  = q => stable(q) ? (Mof(q)/(4/PI))*6.0 : 0.0;   // seconds; ~0 if unstable
+const FOLDS = [2,3,5,7];                     // selectable input folds
+
+// ---- three.js scene ----
+let scene, camera, renderer, rig;
+let cA, cB, product=null;
+let photons=[];
+const COL = { pos:0xf3b13c, neg:0x34c6d6, neu:0x74d6a4, strain:0xe0625a };
+let state = "idle";       // idle | charging | incoming | result
+let energy = 2.0, charging=false, chargeT=0;
+let mode = "prod";        // prod | annih
+let foldA = 2, foldB = 2;
+let resultTimer = 0, productBorn=0, productLife=0, productUnstable=false;
+
+function knot(qfold, wwind, color, scaleR){
+  // render a closure as its (w,q) torus knot; color by polarity, emissive by M
+  const p = Math.max(1, wwind), q = Math.max(2, qfold);
+  const g = new THREE.TorusKnotGeometry(scaleR, scaleR*0.28, 120, 12, p, q);
+  const m = Math.max(0, Mof(qfold));
+  const mat = new THREE.MeshStandardMaterial({
+    color: color, emissive: color, emissiveIntensity: 0.35 + 0.9*Math.min(1,m),
+    metalness:0.2, roughness:0.4 });
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.userData = {q:qfold, w:wwind, base:scaleR};
+  return mesh;
+}
+
+function makeInputs(){
+  if(cA) scene.remove(cA); if(cB) scene.remove(cB);
+  if(product){ scene.remove(product); product=null; }
+  clearPhotons();
+  const colB = (mode==="annih") ? COL.neg : COL.pos;
+  cA = knot(foldA, 1, COL.pos, 0.13); cA.position.set(-0.9, 1.3, -1.6);
+  cB = knot(foldB, 1, colB,    0.13); cB.position.set( 0.9, 1.3, -1.6);
+  scene.add(cA); scene.add(cB);
+}
+
+function clearPhotons(){ photons.forEach(p=>scene.remove(p.m)); photons=[]; }
+function burst(center, n, power){
+  for(let i=0;i<n;i++){
+    const g=new THREE.SphereGeometry(0.018,8,8);
+    const m=new THREE.Mesh(g, new THREE.MeshBasicMaterial({color:0xffffff}));
+    m.position.copy(center);
+    const dir=new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize();
+    photons.push({m, v:dir.multiplyScalar(0.6+0.5*power), life:1.4});
+    scene.add(m);
+  }
+}
+
+function fire(){
+  if(state==="incoming"||state==="result") return;
+  state="incoming";
+  setVerdict("— charging beam —", "#5a6884");
+}
+
+function resolve(){
+  const center = new THREE.Vector3(0,1.3,-1.6);
+  if(mode==="annih"){
+    const released = (sigma(foldA)+sigma(foldB)+energy);
+    burst(center, 46, Math.min(2,released)/2);
+    scene.remove(cA); scene.remove(cB); cA=null; cB=null;
+    setVerdict("ANNIHILATION", "#e0625a");
+    setReadout({prod:"→ throughput released", M:"M → 0",
+      kind:"mirror pair", thr:"σ_released = "+released.toFixed(2),
+      life:"closure gone"});
+    state="result"; resultTimer=2.6; return;
+  }
+  // production by nesting
+  const q = nest(foldA, foldB);
+  const need = thr(q, foldA, foldB);
+  if(energy < need){
+    setVerdict("ELASTIC SCATTER", "#74d6a4");
+    setReadout({prod:`(1,${q}) needs Σ≥${need.toFixed(2)}`, M:Mof(q).toFixed(3),
+      kind: isPrime(q)?"irreducible":"nestable", thr:`Σ=${energy.toFixed(2)} < ${need.toFixed(2)}`,
+      life:"not formed"});
+    // bounce
+    state="result"; resultTimer=1.6; bounce=true; return;
+  }
+  // form product
+  scene.remove(cA); scene.remove(cB); cA=null; cB=null;
+  product = knot(q, 1, stable(q)?COL.neu:COL.strain, 0.16);
+  product.position.copy(center); product.scale.setScalar(0.01);
+  scene.add(product);
+  productBorn = clock; productLife = life(q); productUnstable = !stable(q) || Mof(q)<0.25;
+  const kind = isPrime(q) ? "IRREDUCIBLE (prime)" : "nestable (composite)";
+  setVerdict(stable(q)?"PRODUCTION":"RESONANCE (unstable)", stable(q)?"#74d6a4":"#e0625a");
+  setReadout({prod:`(1,${q})  ${q===4?'half-Möbius':q===3?'third-Möbius':q===2?'Möbius':''}`,
+    M:Mof(q).toFixed(3), kind:kind,
+    thr:`σ=${sigma(q).toFixed(2)}, thr=${need.toFixed(2)} (Σ=${energy.toFixed(2)})`,
+    life: stable(q)? "stable" : (productLife>0?productLife.toFixed(1)+" s":"instant decay")});
+  state="result"; resultTimer = productUnstable ? (Math.max(productLife,0.6)+0.8) : 4.0;
+}
+let bounce=false;
+
+function setVerdict(t,c){ const v=document.getElementById("verdict"); v.textContent=t; v.style.color=c; }
+function setReadout(o){
+  document.getElementById("rIn").textContent = `(1,${foldA}) + (1,${foldB})`;
+  document.getElementById("rProd").textContent = o.prod;
+  document.getElementById("rM").textContent = o.M;
+  document.getElementById("rKind").textContent = o.kind;
+  document.getElementById("rThr").textContent = o.thr;
+  document.getElementById("rLife").textContent = o.life;
+}
+
+let clock=0;
+function init(){
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 100);
+  rig=new THREE.Group(); rig.add(camera); scene.add(rig);
+  camera.position.set(0,1.55,0);
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(2,devicePixelRatio));
+  renderer.setClearColor(0x05070d,1); renderer.xr.enabled=true;
+  document.body.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0x35406a, 0.7));
+  const d=new THREE.DirectionalLight(0xffffff,0.7); d.position.set(2,4,1); scene.add(d);
+  // substrate floor grid
+  const grid=new THREE.GridHelper(8,32,0x1c2740,0x121a2c); grid.position.y=0; scene.add(grid);
+  // collision axis marker
+  const axisMat=new THREE.LineBasicMaterial({color:0x1c2740});
+  const ag=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1.1,1.3,-1.6),new THREE.Vector3(1.1,1.3,-1.6)]);
+  scene.add(new THREE.Line(ag,axisMat));
+
+  makeInputs();
+
+  // desktop camera angle (VR overrides via headset)
+  camera.lookAt(0,1.3,-1.6);
+
+  // VR controllers
+  for(let i=0;i<2;i++){
+    const c=renderer.xr.getController(i);
+    c.userData.idx=i;
+    c.addEventListener("selectstart",()=>{ if(i===1){ charging=true; chargeT=0; } else { mode=(mode==="prod")?"annih":"prod"; syncMode(); makeInputs(); } });
+    c.addEventListener("selectend",()=>{ if(i===1 && charging){ charging=false; energy=Math.min(12,chargeT); syncEnergy(); fire(); } });
+    const rayG=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-1)]);
+    const ray=new THREE.Line(rayG,new THREE.LineBasicMaterial({color:0x34c6d6}));
+    ray.scale.z=2; c.add(ray); rig.add(c);
+  }
+
+  bindUI();
+  renderer.setAnimationLoop(tick);
+  addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+}
+
+function syncMode(){ document.getElementById("mode").textContent = mode==="prod"?"PRODUCTION (same)":"ANNIHILATION (mirror)"; }
+function syncEnergy(){ document.getElementById("energy").value=energy; document.getElementById("eval").textContent=energy.toFixed(2); }
+
+function bindUI(){
+  document.getElementById("enter").onclick=enterVR;
+  document.getElementById("mode").onclick=()=>{ mode=(mode==="prod")?"annih":"prod"; syncMode(); makeInputs(); };
+  document.getElementById("energy").oninput=e=>{ energy=parseFloat(e.target.value); document.getElementById("eval").textContent=energy.toFixed(2); };
+  document.getElementById("foldA").onclick=()=>{ foldA=FOLDS[(FOLDS.indexOf(foldA)+1)%FOLDS.length]; document.getElementById("foldA").textContent=foldA; makeInputs(); };
+  document.getElementById("foldB").onclick=()=>{ foldB=FOLDS[(FOLDS.indexOf(foldB)+1)%FOLDS.length]; document.getElementById("foldB").textContent=foldB; makeInputs(); };
+  document.getElementById("fire").onclick=()=>{ if(state==="idle"){ makeInputs(); fire(); } };
+  document.getElementById("reset").onclick=()=>{ state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884"); };
+  addEventListener("keydown",e=>{ if(e.code==="Space"){ e.preventDefault(); if(state==="idle"){makeInputs();fire();} else {state="idle";bounce=false;makeInputs();setVerdict("— idle —","#5a6884");} }});
+  syncMode();
+}
+
+async function enterVR(){
+  if(!navigator.xr){ alert("No WebXR on this browser."); return; }
+  try{
+    const session=await navigator.xr.requestSession("immersive-vr",{optionalFeatures:["local-floor","bounded-floor"]});
+    renderer.xr.setReferenceSpaceType("local-floor");
+    await renderer.xr.setSession(session);
+    document.getElementById("enter").textContent="in VR";
+  }catch(err){ alert("Could not enter VR: "+err); }
+}
+
+function tick(t,frame){
+  const dt = 1/72;
+  clock += dt;
+  // idle bob + spin
+  [cA,cB].forEach(c=>{ if(c){ c.rotation.y+=dt*0.8; c.rotation.x+=dt*0.3; } });
+  if(product){ product.rotation.y+=dt*1.1; product.rotation.x+=dt*0.4; }
+
+  if(charging){ chargeT=Math.min(12, chargeT+dt*4.0); energy=chargeT; syncEnergy();
+    [cA,cB].forEach(c=>{ if(c){ const s=1+0.15*Math.sin(clock*18); c.scale.setScalar(s);} }); }
+
+  if(state==="incoming"){
+    let arrived=true;
+    if(cA){ cA.position.x=Math.min(0-0.02, cA.position.x+dt*1.6); if(cA.position.x<-0.04)arrived=false; }
+    if(cB){ cB.position.x=Math.max(0+0.02, cB.position.x-dt*1.6); if(cB.position.x> 0.04)arrived=false; }
+    if(arrived){ resolve(); }
+  }
+
+  if(state==="result"){
+    // bounce on scatter
+    if(bounce){ if(cA)cA.position.x-=dt*1.0; if(cB)cB.position.x+=dt*1.0; }
+    // product grow then (if unstable) decay
+    if(product){
+      if(clock-productBorn < 0.4){ product.scale.setScalar(Math.min(1, product.scale.x+dt*3)); }
+      if(productUnstable && clock-productBorn > Math.max(productLife,0.6)){
+        burst(product.position, 30, 0.6); scene.remove(product); product=null;
+        setVerdict("DECAYED → "+(foldA<foldB?`(1,${foldA})`:`(1,${foldB})`)+" + balls","#e0625a");
+      }
+    }
+    resultTimer-=dt;
+    if(resultTimer<=0){ state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884"); }
+  }
+
+  // photons
+  for(let i=photons.length-1;i>=0;i--){ const p=photons[i];
+    p.m.position.addScaledVector(p.v, dt); p.life-=dt;
+    p.m.material.opacity=Math.max(0,p.life/1.4); p.m.material.transparent=true;
+    if(p.life<=0){ scene.remove(p.m); photons.splice(i,1); } }
+
+  renderer.render(scene,camera);
+}
+
+init();
+</script>
+</body>
+</html>
