@@ -47,6 +47,7 @@
       <label style="width:auto">fold B</label><button class="ctl" id="foldB">2</button></div>
     <div class="row">
       <button class="ctl" id="fire">FIRE ▸</button>
+      <button class="ctl" id="freeze">freeze</button>
       <button class="ctl" id="reset">reset</button></div>
   </div>
   <div id="readout">
@@ -56,8 +57,9 @@
     <div><span class="k">M</span> <span id="rM">—</span> &nbsp; <span class="k">kind</span> <span id="rKind">—</span></div>
     <div><span class="k">σ / threshold</span> <span id="rThr">—</span></div>
     <div><span class="k">lifetime</span> <span id="rLife">—</span></div>
+    <div id="rWhy" style="color:var(--neu);margin-top:8px;font-size:11px;line-height:1.5">Collide two closures: same polarity fuses (a×b), mirror annihilates.</div>
   </div>
-  <div id="hint">desktop: FIRE button / Space. &nbsp; VR: hold right trigger to charge, release to fire · left trigger toggles mode</div>
+  <div id="hint">desktop: FIRE / Space, freeze to inspect. &nbsp; VR: aim at arena + hold trigger to charge (meter shows Σ), release to fire · point menu tiles to set folds, mode, freeze, exit</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -105,6 +107,7 @@ function makeInputs(){
   cA = knot(foldA, 1, COL.pos, 0.13); cA.position.set(-0.9, 1.3, -1.6);
   cB = knot(foldB, 1, colB,    0.13); cB.position.set( 0.9, 1.3, -1.6);
   scene.add(cA); scene.add(cB);
+  updateChargeTick();
 }
 
 function clearPhotons(){ photons.forEach(p=>scene.remove(p.m)); photons=[]; }
@@ -134,8 +137,9 @@ function resolve(){
     setVerdict("ANNIHILATION", "#e0625a");
     setReadout({prod:"→ throughput released", M:"M → 0",
       kind:"mirror pair", thr:"σ_released = "+released.toFixed(2),
-      life:"closure gone"});
-    state="result"; resultTimer=2.6; return;
+      life:"closure gone",
+      explain:"Mirror pair: the two phase-twists cancel, the pattern can't close, M→0 — so the stored order leaves as throughput (the photon burst)."});
+    state="result"; resultTimer=4.0; return;
   }
   // production by nesting
   const q = nest(foldA, foldB);
@@ -143,31 +147,39 @@ function resolve(){
   if(energy < need){
     setVerdict("ELASTIC SCATTER", "#74d6a4");
     setReadout({prod:`(1,${q}) needs Σ≥${need.toFixed(2)}`, M:Mof(q).toFixed(3),
-      kind: isPrime(q)?"irreducible":"nestable", thr:`Σ=${energy.toFixed(2)} < ${need.toFixed(2)}`,
-      life:"not formed"});
-    // bounce
-    state="result"; resultTimer=1.6; bounce=true; return;
+      kind: isPrime(q)?"irreducible (prime)":"nestable (composite)", thr:`Σ=${energy.toFixed(2)} < ${need.toFixed(2)}`,
+      life:"not formed",
+      explain:`Below threshold: Σ=${energy.toFixed(1)} can't pay the σ-gap of ${need.toFixed(1)} needed to bind ${foldA}×${foldB}=${q}, so they just bounce. Charge higher.`});
+    state="result"; resultTimer=4.0; bounce=true; return;
   }
   // form product
+  const m = Mof(q);
   scene.remove(cA); scene.remove(cB); cA=null; cB=null;
   product = knot(q, 1, stable(q)?COL.neu:COL.strain, 0.16);
   product.position.copy(center); product.scale.setScalar(0.01);
   scene.add(product);
-  productBorn = clock; productLife = life(q); productUnstable = !stable(q) || Mof(q)<0.25;
+  productBorn = clock; productLife = life(q); productUnstable = !stable(q);
   const kind = isPrime(q) ? "IRREDUCIBLE (prime)" : "nestable (composite)";
+  const named = q===4?'half-Möbius':q===3?'third-Möbius':q===2?'Möbius':'';
+  let explain;
+  if(m>0.25)      explain=`Same polarity fuses: ${foldA}×${foldB}=${q} nests into one closure. M=${m.toFixed(2)}>0, so it holds together.`;
+  else if(m>0)    explain=`Forms, but barely: M=${m.toFixed(2)} is near zero — this is right at the q=25 wall where strain almost eats the coupling.`;
+  else            explain=`Past the q=25 ceiling: strain λ now beats coupling χs, so M=${m.toFixed(2)}<0. It can't hold — it's a resonance that decays.`;
   setVerdict(stable(q)?"PRODUCTION":"RESONANCE (unstable)", stable(q)?"#74d6a4":"#e0625a");
-  setReadout({prod:`(1,${q})  ${q===4?'half-Möbius':q===3?'third-Möbius':q===2?'Möbius':''}`,
-    M:Mof(q).toFixed(3), kind:kind,
+  setReadout({prod:`(1,${q})  ${named}`,
+    M:m.toFixed(3), kind:kind,
     thr:`σ=${sigma(q).toFixed(2)}, thr=${need.toFixed(2)} (Σ=${energy.toFixed(2)})`,
-    life: stable(q)? "stable" : (productLife>0?productLife.toFixed(1)+" s":"instant decay")});
-  state="result"; resultTimer = productUnstable ? (Math.max(productLife,0.6)+0.8) : 4.0;
+    life: stable(q)? "stable — persists (freeze to hold)" : "instant decay",
+    explain});
+  state="result"; resultTimer = productUnstable ? (Math.max(productLife,0.6)+0.8) : 8.0;
 }
 let bounce=false;
 
 // ---- VR pointable menu + in-headset readout ----
 let controllers=[], vrTiles=[], vrGroup=null, vrReadout=null, menuInteract=false;
 const raycaster=new THREE.Raycaster(), tempMatrix=new THREE.Matrix4();
-let vrState={verdict:"— idle —",vColor:"#5a6884",inputs:"(1,2) + (1,2)",prod:"—",M:"—",kind:"",thr:"—",life:"—"};
+let vrState={verdict:"— idle —",vColor:"#5a6884",inputs:"(1,2) + (1,2)",prod:"—",M:"—",kind:"",thr:"—",life:"—",explain:"Collide two closures: same polarity fuses (a×b), mirror annihilates."};
+let frozen=false, chargeBar=null, chargeFill=null, chargeTick=null, chargeLab=null;
 
 function setVerdict(t,c){ const v=document.getElementById("verdict"); v.textContent=t; v.style.color=c;
   vrState.verdict=t; vrState.vColor=c; drawReadout(); }
@@ -178,8 +190,9 @@ function setReadout(o){
   document.getElementById("rKind").textContent = o.kind;
   document.getElementById("rThr").textContent = o.thr;
   document.getElementById("rLife").textContent = o.life;
+  const why=document.getElementById("rWhy"); if(why) why.textContent=o.explain||"";
   vrState.inputs=`(1,${foldA}) + (1,${foldB})`; vrState.prod=o.prod; vrState.M=o.M;
-  vrState.kind=o.kind; vrState.thr=o.thr; vrState.life=o.life; drawReadout();
+  vrState.kind=o.kind; vrState.thr=o.thr; vrState.life=o.life; vrState.explain=o.explain||""; drawReadout();
 }
 
 let clock=0;
@@ -217,13 +230,14 @@ function init(){
     const ray=new THREE.Line(rayG,new THREE.LineBasicMaterial({color:0x34c6d6}));
     ray.scale.z=2.5; c.add(ray); rig.add(c); controllers.push(c);
   }
-  buildVRMenu(); buildVRReadout();
+  buildVRMenu(); buildVRReadout(); buildChargeBar(); updateChargeTick();
   renderer.xr.addEventListener("sessionstart",()=>{
     vrGroup.visible=true; vrReadout.mesh.visible=true;
     markSelected("foldA",foldA); markSelected("foldB",foldB); drawReadout();
   });
   renderer.xr.addEventListener("sessionend",()=>{ vrGroup.visible=false; vrReadout.mesh.visible=false;
-    charging=false; menuInteract=false; document.getElementById("enter").textContent="Enter VR"; });
+    if(chargeBar) chargeBar.visible=false; charging=false; menuInteract=false; frozen=false; syncFreezeBtn();
+    document.getElementById("enter").textContent="Enter VR"; });
 
   bindUI();
   renderer.setAnimationLoop(tick);
@@ -239,9 +253,10 @@ function bindUI(){
   document.getElementById("energy").oninput=e=>{ energy=parseFloat(e.target.value); document.getElementById("eval").textContent=energy.toFixed(2); };
   document.getElementById("foldA").onclick=()=>{ foldA=FOLDS[(FOLDS.indexOf(foldA)+1)%FOLDS.length]; document.getElementById("foldA").textContent=foldA; makeInputs(); };
   document.getElementById("foldB").onclick=()=>{ foldB=FOLDS[(FOLDS.indexOf(foldB)+1)%FOLDS.length]; document.getElementById("foldB").textContent=foldB; makeInputs(); };
-  document.getElementById("fire").onclick=()=>{ if(state==="idle"){ makeInputs(); fire(); } };
-  document.getElementById("reset").onclick=()=>{ state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884"); };
-  addEventListener("keydown",e=>{ if(e.code==="Space"){ e.preventDefault(); if(state==="idle"){makeInputs();fire();} else {state="idle";bounce=false;makeInputs();setVerdict("— idle —","#5a6884");} }});
+  document.getElementById("fire").onclick=()=>{ if(!frozen && state==="idle"){ makeInputs(); fire(); } };
+  document.getElementById("freeze").onclick=()=>{ frozen=!frozen; syncFreezeBtn(); };
+  document.getElementById("reset").onclick=()=>{ frozen=false; syncFreezeBtn(); state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884"); };
+  addEventListener("keydown",e=>{ if(e.code==="Space"){ e.preventDefault(); if(!frozen && state==="idle"){makeInputs();fire();} else {frozen=false;syncFreezeBtn();state="idle";bounce=false;makeInputs();setVerdict("— idle —","#5a6884");} }});
   syncMode();
 }
 
@@ -271,10 +286,15 @@ function drawTile(t){
   const accent = isNum && t.selected;
   ctx.fillStyle = accent ? "#f3b13c" : "#0d1422"; rr(ctx,6,6,W-12,H-12,18); ctx.fill();
   ctx.lineWidth=5;
-  ctx.strokeStyle = t.kind==="exit" ? "#e0625a" : ((accent||t.kind==="mode") ? "#f3b13c" : "#1c2740"); ctx.stroke();
+  let border="#1c2740";
+  if(t.kind==="exit") border="#e0625a";
+  else if(t.kind==="freeze") border = t.selected? "#f3b13c" : "#34c6d6";
+  else if(accent||t.kind==="mode") border="#f3b13c";
+  ctx.strokeStyle=border; ctx.stroke();
   ctx.textAlign="center"; ctx.textBaseline="middle";
   if(t.kind==="mode"){ ctx.fillStyle="#eef3fb"; ctx.font="bold 30px monospace"; ctx.fillText(mode==="prod"?"PRODUCTION":"ANNIHILATE",W/2,H/2); }
   else if(t.kind==="exit"){ ctx.fillStyle="#e0625a"; ctx.font="bold 30px monospace"; ctx.fillText("\u2715 EXIT VR",W/2,H/2); }
+  else if(t.kind==="freeze"){ ctx.fillStyle=t.selected?"#f3b13c":"#eef3fb"; ctx.font="bold 30px monospace"; ctx.fillText(t.selected?"\u275A\u275A FROZEN":"\u275A\u275A FREEZE",W/2,H/2); }
   else { ctx.fillStyle = accent ? "#05070d" : "#eef3fb"; ctx.font="bold 66px monospace"; ctx.fillText(String(t.value),W/2,H/2); }
   t.lab.tex.needsUpdate=true;
 }
@@ -282,31 +302,58 @@ function drawHeader(lab,text){ const {ctx,canvas}=lab,W=canvas.width,H=canvas.he
   ctx.fillStyle="#5a6884"; ctx.font="bold 30px monospace"; ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(text,8,H/2); lab.tex.needsUpdate=true; }
 function buildVRMenu(){
   vrGroup=new THREE.Group(); vrGroup.position.set(-0.95,1.0,-1.5); vrGroup.rotation.y=0.5; scene.add(vrGroup); vrGroup.visible=false; vrTiles=[];
-  const hA=makeLabel(0.34,0.06,340,60); hA.mesh.position.set(-0.06,0.34,0); vrGroup.add(hA.mesh); drawHeader(hA,"FOLD A");
+  const hA=makeLabel(0.34,0.06,340,60); hA.mesh.position.set(-0.06,0.42,0); vrGroup.add(hA.mesh); drawHeader(hA,"FOLD A");
   FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldA",value:v,selected:v===foldA};
-    lab.mesh.position.set(-0.24+i*0.12,0.22,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
-  const hB=makeLabel(0.34,0.06,340,60); hB.mesh.position.set(-0.06,0.08,0); vrGroup.add(hB.mesh); drawHeader(hB,"FOLD B");
+    lab.mesh.position.set(-0.24+i*0.12,0.30,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
+  const hB=makeLabel(0.34,0.06,340,60); hB.mesh.position.set(-0.06,0.16,0); vrGroup.add(hB.mesh); drawHeader(hB,"FOLD B");
   FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldB",value:v,selected:v===foldB};
-    lab.mesh.position.set(-0.24+i*0.12,-0.04,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
+    lab.mesh.position.set(-0.24+i*0.12,0.04,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
   const ml=makeLabel(0.5,0.1,500,120); const mt={lab:ml,mesh:ml.mesh,kind:"mode",value:"mode",selected:false};
-  ml.mesh.position.set(0,-0.20,0); vrGroup.add(ml.mesh); vrTiles.push(mt); drawTile(mt);
+  ml.mesh.position.set(0,-0.12,0); vrGroup.add(ml.mesh); vrTiles.push(mt); drawTile(mt);
+  const fl=makeLabel(0.5,0.1,500,120); const ft={lab:fl,mesh:fl.mesh,kind:"freeze",value:"freeze",selected:false};
+  fl.mesh.position.set(0,-0.26,0); vrGroup.add(fl.mesh); vrTiles.push(ft); drawTile(ft);
   const xl=makeLabel(0.5,0.1,500,120); const xt={lab:xl,mesh:xl.mesh,kind:"exit",value:"exit",selected:false};
-  xl.mesh.position.set(0,-0.34,0); vrGroup.add(xl.mesh); vrTiles.push(xt); drawTile(xt);
-  const instr=makeLabel(0.62,0.05,620,50); instr.mesh.position.set(0,-0.46,0); vrGroup.add(instr.mesh);
+  xl.mesh.position.set(0,-0.40,0); vrGroup.add(xl.mesh); vrTiles.push(xt); drawTile(xt);
+  const instr=makeLabel(0.62,0.05,620,50); instr.mesh.position.set(0,-0.52,0); vrGroup.add(instr.mesh);
   instr.ctx.fillStyle="#5a6884"; instr.ctx.font="22px monospace"; instr.ctx.textAlign="center"; instr.ctx.textBaseline="middle";
   instr.ctx.fillText("point + trigger to set · aim at arena, hold to charge",310,25); instr.tex.needsUpdate=true;
 }
-function buildVRReadout(){ const lab=makeLabel(0.85,0.6,560,400); lab.mesh.position.set(0.95,1.15,-1.5); lab.mesh.rotation.y=-0.5; lab.mesh.visible=false; scene.add(lab.mesh); vrReadout=lab; drawReadout(); }
+function buildVRReadout(){ const lab=makeLabel(0.85,0.73,560,480); lab.mesh.position.set(0.95,1.18,-1.5); lab.mesh.rotation.y=-0.5; lab.mesh.visible=false; scene.add(lab.mesh); vrReadout=lab; drawReadout(); }
+function wrapText(ctx,text,x,y,maxW,lh){ const words=String(text).split(" "); let line="";
+  for(const w of words){ const test=line?line+" "+w:w; if(ctx.measureText(test).width>maxW && line){ ctx.fillText(line,x,y); line=w; y+=lh; } else line=test; }
+  if(line) ctx.fillText(line,x,y); }
 function drawReadout(){
   if(!vrReadout) return; const {ctx,canvas}=vrReadout,W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
   ctx.fillStyle="rgba(10,15,26,0.92)"; rr(ctx,0,0,W,H,24); ctx.fill(); ctx.lineWidth=3; ctx.strokeStyle="#1c2740"; ctx.stroke();
   ctx.textAlign="left"; ctx.textBaseline="top";
-  ctx.fillStyle=vrState.vColor||"#5a6884"; ctx.font="bold 44px monospace"; ctx.fillText(vrState.verdict||"— idle —",28,26);
-  ctx.font="28px monospace"; let y=98; const line=(k,v)=>{ ctx.fillStyle="#5a6884"; ctx.fillText(k,28,y); ctx.fillStyle="#eef3fb"; ctx.fillText(v,210,y); y+=46; };
+  ctx.fillStyle=vrState.vColor||"#5a6884"; ctx.font="bold 42px monospace"; ctx.fillText(vrState.verdict||"— idle —",26,24);
+  ctx.font="27px monospace"; let y=92; const line=(k,v)=>{ ctx.fillStyle="#5a6884"; ctx.fillText(k,26,y); ctx.fillStyle="#eef3fb"; ctx.fillText(v,200,y); y+=42; };
   line("inputs",vrState.inputs); line("product",vrState.prod);
   line("M",(vrState.M)+"   "+(vrState.kind||"")); line("σ / thr",vrState.thr); line("lifetime",vrState.life);
+  ctx.fillStyle="#74d6a4"; ctx.font="23px monospace"; wrapText(ctx, vrState.explain||"", 26, y+14, W-52, 31);
   vrReadout.tex.needsUpdate=true;
 }
+function buildChargeBar(){
+  chargeBar=new THREE.Group(); chargeBar.position.set(0,1.0,-1.5); chargeBar.visible=false; scene.add(chargeBar);
+  chargeBar.add(new THREE.Mesh(new THREE.PlaneGeometry(0.66,0.04), new THREE.MeshBasicMaterial({color:0x0d1422})));
+  chargeFill=new THREE.Mesh(new THREE.PlaneGeometry(0.66,0.04), new THREE.MeshBasicMaterial({color:0xf3b13c}));
+  chargeFill.position.z=0.001; chargeBar.add(chargeFill);
+  chargeTick=new THREE.Mesh(new THREE.PlaneGeometry(0.009,0.075), new THREE.MeshBasicMaterial({color:0x34c6d6}));
+  chargeTick.position.z=0.002; chargeBar.add(chargeTick);
+  chargeLab=makeLabel(0.66,0.06,520,60); chargeLab.mesh.position.set(0,0.075,0); chargeBar.add(chargeLab.mesh);
+}
+function setChargeFill(frac){ frac=Math.max(0,Math.min(1,frac)); chargeFill.scale.x=Math.max(0.001,frac); chargeFill.position.x=-0.33*(1-frac); }
+function updateChargeTick(){
+  if(!chargeTick) return;
+  if(mode==="prod"){ const need=thr(nest(foldA,foldB),foldA,foldB); const f=need/12;
+    chargeTick.visible = need>0 && need<=12; chargeTick.position.x = -0.33 + 0.66*f; }
+  else { chargeTick.visible=false; }
+}
+function drawCharge(){ const {ctx,canvas}=chargeLab,W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#eef3fb"; ctx.font="bold 32px monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  const need = mode==="prod" ? thr(nest(foldA,foldB),foldA,foldB) : 0;
+  const tip = (mode==="prod" && need>0) ? "   (cyan = Σ to form)" : "";
+  ctx.fillText("charge  Σ = "+chargeT.toFixed(1)+tip, W/2, H/2); chargeLab.tex.needsUpdate=true; }
 function tileHitFor(c){
   tempMatrix.identity().extractRotation(c.matrixWorld);
   raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld);
@@ -316,8 +363,11 @@ function tileHitFor(c){
 }
 function markSelected(kind,val){ vrTiles.forEach(t=>{ if(t.kind===kind){ t.selected=(t.value===val); drawTile(t); } });
   const btn=document.getElementById(kind); if(btn) btn.textContent=val; }
+function syncFreezeBtn(){ const b=document.getElementById("freeze"); if(b) b.textContent=frozen?"frozen":"freeze";
+  const ft=vrTiles.find(t=>t.kind==="freeze"); if(ft){ ft.selected=frozen; drawTile(ft); } }
 function applyTile(t){
   if(t.kind==="exit"){ const s=renderer.xr.getSession(); if(s){ s.end(); } return; }
+  if(t.kind==="freeze"){ frozen=!frozen; syncFreezeBtn(); return; }
   if(t.kind==="foldA"){ foldA=t.value; markSelected("foldA",foldA); }
   else if(t.kind==="foldB"){ foldB=t.value; markSelected("foldB",foldB); }
   else if(t.kind==="mode"){ mode=(mode==="prod")?"annih":"prod"; syncMode(); drawTile(t); }
@@ -325,6 +375,7 @@ function applyTile(t){
 }
 function onSelectStart(c){ const t=tileHitFor(c);
   if(t){ applyTile(t); menuInteract=true; return; }
+  if(frozen) return;
   if(state==="idle"){ charging=true; chargeT=0; } }
 function onSelectEnd(c){
   if(menuInteract){ menuInteract=false; return; }
@@ -332,47 +383,47 @@ function onSelectEnd(c){
 
 function tick(t,frame){
   const dt = 1/72;
-  clock += dt;
-  // idle bob + spin
-  [cA,cB].forEach(c=>{ if(c){ c.rotation.y+=dt*0.8; c.rotation.x+=dt*0.3; } });
-  if(product){ product.rotation.y+=dt*1.1; product.rotation.x+=dt*0.4; }
-
-  // VR tile hover feedback
+  // hover feedback works even while frozen, so you can hit unfreeze/exit
   if(vrGroup && vrGroup.visible){
     vrTiles.forEach(t=>t.mesh.scale.setScalar(1));
     controllers.forEach(c=>{ const t=tileHitFor(c); if(t) t.mesh.scale.setScalar(1.18); });
   }
 
-  if(charging){ chargeT=Math.min(12, chargeT+dt*4.0); energy=chargeT; syncEnergy();
-    [cA,cB].forEach(c=>{ if(c){ const s=1+0.15*Math.sin(clock*18); c.scale.setScalar(s);} }); }
+  if(!frozen){
+    clock += dt;
+    [cA,cB].forEach(c=>{ if(c){ c.rotation.y+=dt*0.8; c.rotation.x+=dt*0.3; } });
+    if(product){ product.rotation.y+=dt*1.1; product.rotation.x+=dt*0.4; }
 
-  if(state==="incoming"){
-    let arrived=true;
-    if(cA){ cA.position.x=Math.min(0-0.02, cA.position.x+dt*1.6); if(cA.position.x<-0.04)arrived=false; }
-    if(cB){ cB.position.x=Math.max(0+0.02, cB.position.x-dt*1.6); if(cB.position.x> 0.04)arrived=false; }
-    if(arrived){ resolve(); }
-  }
+    if(charging){ chargeT=Math.min(12, chargeT+dt*4.0); energy=chargeT; syncEnergy();
+      [cA,cB].forEach(c=>{ if(c){ const s=1+0.15*Math.sin(clock*18); c.scale.setScalar(s);} });
+      if(chargeBar){ chargeBar.visible=true; setChargeFill(chargeT/12); drawCharge(); } }
+    else if(chargeBar){ chargeBar.visible=false; }
 
-  if(state==="result"){
-    // bounce on scatter
-    if(bounce){ if(cA)cA.position.x-=dt*1.0; if(cB)cB.position.x+=dt*1.0; }
-    // product grow then (if unstable) decay
-    if(product){
-      if(clock-productBorn < 0.4){ product.scale.setScalar(Math.min(1, product.scale.x+dt*3)); }
-      if(productUnstable && clock-productBorn > Math.max(productLife,0.6)){
-        burst(product.position, 30, 0.6); scene.remove(product); product=null;
-        setVerdict("DECAYED → "+(foldA<foldB?`(1,${foldA})`:`(1,${foldB})`)+" + balls","#e0625a");
-      }
+    if(state==="incoming"){
+      let arrived=true;
+      if(cA){ cA.position.x=Math.min(0-0.02, cA.position.x+dt*1.6); if(cA.position.x<-0.04)arrived=false; }
+      if(cB){ cB.position.x=Math.max(0+0.02, cB.position.x-dt*1.6); if(cB.position.x> 0.04)arrived=false; }
+      if(arrived){ resolve(); }
     }
-    resultTimer-=dt;
-    if(resultTimer<=0){ state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884"); }
-  }
 
-  // photons
-  for(let i=photons.length-1;i>=0;i--){ const p=photons[i];
-    p.m.position.addScaledVector(p.v, dt); p.life-=dt;
-    p.m.material.opacity=Math.max(0,p.life/1.4); p.m.material.transparent=true;
-    if(p.life<=0){ scene.remove(p.m); photons.splice(i,1); } }
+    if(state==="result"){
+      if(bounce){ if(cA)cA.position.x-=dt*1.0; if(cB)cB.position.x+=dt*1.0; }
+      if(product){
+        if(clock-productBorn < 0.4){ product.scale.setScalar(Math.min(1, product.scale.x+dt*3)); }
+        if(productUnstable && clock-productBorn > Math.max(productLife,0.6)){
+          burst(product.position, 30, 0.6); scene.remove(product); product=null;
+          setVerdict("DECAYED → "+(foldA<foldB?`(1,${foldA})`:`(1,${foldB})`)+" + balls","#e0625a");
+        }
+      }
+      resultTimer-=dt;
+      if(resultTimer<=0){ state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884"); }
+    }
+
+    for(let i=photons.length-1;i>=0;i--){ const p=photons[i];
+      p.m.position.addScaledVector(p.v, dt); p.life-=dt;
+      p.m.material.opacity=Math.max(0,p.life/1.4); p.m.material.transparent=true;
+      if(p.life<=0){ scene.remove(p.m); photons.splice(i,1); } }
+  }
 
   renderer.render(scene,camera);
 }
