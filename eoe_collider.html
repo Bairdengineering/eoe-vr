@@ -223,7 +223,7 @@ function init(){
     markSelected("foldA",foldA); markSelected("foldB",foldB); drawReadout();
   });
   renderer.xr.addEventListener("sessionend",()=>{ vrGroup.visible=false; vrReadout.mesh.visible=false;
-    document.getElementById("enter").textContent="Enter VR"; });
+    charging=false; menuInteract=false; document.getElementById("enter").textContent="Enter VR"; });
 
   bindUI();
   renderer.setAnimationLoop(tick);
@@ -267,11 +267,14 @@ function makeLabel(w,h,cw,ch){
 }
 function drawTile(t){
   const {ctx,canvas}=t.lab, W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
-  const accent = t.kind!=="mode" && t.selected;
+  const isNum = (t.kind==="foldA"||t.kind==="foldB");
+  const accent = isNum && t.selected;
   ctx.fillStyle = accent ? "#f3b13c" : "#0d1422"; rr(ctx,6,6,W-12,H-12,18); ctx.fill();
-  ctx.lineWidth=5; ctx.strokeStyle = (t.selected||t.kind==="mode") ? "#f3b13c" : "#1c2740"; ctx.stroke();
+  ctx.lineWidth=5;
+  ctx.strokeStyle = t.kind==="exit" ? "#e0625a" : ((accent||t.kind==="mode") ? "#f3b13c" : "#1c2740"); ctx.stroke();
   ctx.textAlign="center"; ctx.textBaseline="middle";
   if(t.kind==="mode"){ ctx.fillStyle="#eef3fb"; ctx.font="bold 30px monospace"; ctx.fillText(mode==="prod"?"PRODUCTION":"ANNIHILATE",W/2,H/2); }
+  else if(t.kind==="exit"){ ctx.fillStyle="#e0625a"; ctx.font="bold 30px monospace"; ctx.fillText("\u2715 EXIT VR",W/2,H/2); }
   else { ctx.fillStyle = accent ? "#05070d" : "#eef3fb"; ctx.font="bold 66px monospace"; ctx.fillText(String(t.value),W/2,H/2); }
   t.lab.tex.needsUpdate=true;
 }
@@ -286,8 +289,10 @@ function buildVRMenu(){
   FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldB",value:v,selected:v===foldB};
     lab.mesh.position.set(-0.24+i*0.12,-0.04,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
   const ml=makeLabel(0.5,0.1,500,120); const mt={lab:ml,mesh:ml.mesh,kind:"mode",value:"mode",selected:false};
-  ml.mesh.position.set(0,-0.24,0); vrGroup.add(ml.mesh); vrTiles.push(mt); drawTile(mt);
-  const instr=makeLabel(0.62,0.05,620,50); instr.mesh.position.set(0,-0.38,0); vrGroup.add(instr.mesh);
+  ml.mesh.position.set(0,-0.20,0); vrGroup.add(ml.mesh); vrTiles.push(mt); drawTile(mt);
+  const xl=makeLabel(0.5,0.1,500,120); const xt={lab:xl,mesh:xl.mesh,kind:"exit",value:"exit",selected:false};
+  xl.mesh.position.set(0,-0.34,0); vrGroup.add(xl.mesh); vrTiles.push(xt); drawTile(xt);
+  const instr=makeLabel(0.62,0.05,620,50); instr.mesh.position.set(0,-0.46,0); vrGroup.add(instr.mesh);
   instr.ctx.fillStyle="#5a6884"; instr.ctx.font="22px monospace"; instr.ctx.textAlign="center"; instr.ctx.textBaseline="middle";
   instr.ctx.fillText("point + trigger to set · aim at arena, hold to charge",310,25); instr.tex.needsUpdate=true;
 }
@@ -312,6 +317,7 @@ function tileHitFor(c){
 function markSelected(kind,val){ vrTiles.forEach(t=>{ if(t.kind===kind){ t.selected=(t.value===val); drawTile(t); } });
   const btn=document.getElementById(kind); if(btn) btn.textContent=val; }
 function applyTile(t){
+  if(t.kind==="exit"){ const s=renderer.xr.getSession(); if(s){ s.end(); } return; }
   if(t.kind==="foldA"){ foldA=t.value; markSelected("foldA",foldA); }
   else if(t.kind==="foldB"){ foldB=t.value; markSelected("foldB",foldB); }
   else if(t.kind==="mode"){ mode=(mode==="prod")?"annih":"prod"; syncMode(); drawTile(t); }
