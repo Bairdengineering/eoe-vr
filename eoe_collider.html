@@ -71,7 +71,7 @@ const isPrime = n => { if(n<2)return false; for(let d=2;d*d<=n;d++) if(n%d===0)r
 const nest  = (a,b) => a*b;                 // nesting composition (derived this session)
 const thr   = (q,a,b) => Math.max(0, sigma(q)-sigma(a)-sigma(b));
 const life  = q => stable(q) ? (Mof(q)/(4/PI))*6.0 : 0.0;   // seconds; ~0 if unstable
-const FOLDS = [2,3,5,7];                     // selectable input folds
+const FOLDS = [2,3,5,7,11];                  // selectable input folds
 
 // ---- three.js scene ----
 let scene, camera, renderer, rig;
@@ -164,7 +164,13 @@ function resolve(){
 }
 let bounce=false;
 
-function setVerdict(t,c){ const v=document.getElementById("verdict"); v.textContent=t; v.style.color=c; }
+// ---- VR pointable menu + in-headset readout ----
+let controllers=[], vrTiles=[], vrGroup=null, vrReadout=null, menuInteract=false;
+const raycaster=new THREE.Raycaster(), tempMatrix=new THREE.Matrix4();
+let vrState={verdict:"— idle —",vColor:"#5a6884",inputs:"(1,2) + (1,2)",prod:"—",M:"—",kind:"",thr:"—",life:"—"};
+
+function setVerdict(t,c){ const v=document.getElementById("verdict"); v.textContent=t; v.style.color=c;
+  vrState.verdict=t; vrState.vColor=c; drawReadout(); }
 function setReadout(o){
   document.getElementById("rIn").textContent = `(1,${foldA}) + (1,${foldB})`;
   document.getElementById("rProd").textContent = o.prod;
@@ -172,6 +178,8 @@ function setReadout(o){
   document.getElementById("rKind").textContent = o.kind;
   document.getElementById("rThr").textContent = o.thr;
   document.getElementById("rLife").textContent = o.life;
+  vrState.inputs=`(1,${foldA}) + (1,${foldB})`; vrState.prod=o.prod; vrState.M=o.M;
+  vrState.kind=o.kind; vrState.thr=o.thr; vrState.life=o.life; drawReadout();
 }
 
 let clock=0;
@@ -199,16 +207,23 @@ function init(){
   // desktop camera angle (VR overrides via headset)
   camera.lookAt(0,1.3,-1.6);
 
-  // VR controllers
+  // VR controllers — either hand: aim at a tile + trigger = select; aim at arena + hold = charge
+  controllers=[];
   for(let i=0;i<2;i++){
     const c=renderer.xr.getController(i);
-    c.userData.idx=i;
-    c.addEventListener("selectstart",()=>{ if(i===1){ charging=true; chargeT=0; } else { mode=(mode==="prod")?"annih":"prod"; syncMode(); makeInputs(); } });
-    c.addEventListener("selectend",()=>{ if(i===1 && charging){ charging=false; energy=Math.min(12,chargeT); syncEnergy(); fire(); } });
+    c.addEventListener("selectstart",()=>onSelectStart(c));
+    c.addEventListener("selectend",()=>onSelectEnd(c));
     const rayG=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-1)]);
     const ray=new THREE.Line(rayG,new THREE.LineBasicMaterial({color:0x34c6d6}));
-    ray.scale.z=2; c.add(ray); rig.add(c);
+    ray.scale.z=2.5; c.add(ray); rig.add(c); controllers.push(c);
   }
+  buildVRMenu(); buildVRReadout();
+  renderer.xr.addEventListener("sessionstart",()=>{
+    vrGroup.visible=true; vrReadout.mesh.visible=true;
+    markSelected("foldA",foldA); markSelected("foldB",foldB); drawReadout();
+  });
+  renderer.xr.addEventListener("sessionend",()=>{ vrGroup.visible=false; vrReadout.mesh.visible=false;
+    document.getElementById("enter").textContent="Enter VR"; });
 
   bindUI();
   renderer.setAnimationLoop(tick);
@@ -240,12 +255,87 @@ async function enterVR(){
   }catch(err){ alert("Could not enter VR: "+err); }
 }
 
+// ---- VR menu / readout construction ----
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function makeLabel(w,h,cw,ch){
+  const canvas=document.createElement("canvas"); canvas.width=cw; canvas.height=ch;
+  const ctx=canvas.getContext("2d");
+  const tex=new THREE.CanvasTexture(canvas); tex.anisotropy=4;
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);
+  return {mesh,canvas,ctx,tex};
+}
+function drawTile(t){
+  const {ctx,canvas}=t.lab, W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
+  const accent = t.kind!=="mode" && t.selected;
+  ctx.fillStyle = accent ? "#f3b13c" : "#0d1422"; rr(ctx,6,6,W-12,H-12,18); ctx.fill();
+  ctx.lineWidth=5; ctx.strokeStyle = (t.selected||t.kind==="mode") ? "#f3b13c" : "#1c2740"; ctx.stroke();
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  if(t.kind==="mode"){ ctx.fillStyle="#eef3fb"; ctx.font="bold 30px monospace"; ctx.fillText(mode==="prod"?"PRODUCTION":"ANNIHILATE",W/2,H/2); }
+  else { ctx.fillStyle = accent ? "#05070d" : "#eef3fb"; ctx.font="bold 66px monospace"; ctx.fillText(String(t.value),W/2,H/2); }
+  t.lab.tex.needsUpdate=true;
+}
+function drawHeader(lab,text){ const {ctx,canvas}=lab,W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#5a6884"; ctx.font="bold 30px monospace"; ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(text,8,H/2); lab.tex.needsUpdate=true; }
+function buildVRMenu(){
+  vrGroup=new THREE.Group(); vrGroup.position.set(-0.95,1.0,-1.5); vrGroup.rotation.y=0.5; scene.add(vrGroup); vrGroup.visible=false; vrTiles=[];
+  const hA=makeLabel(0.34,0.06,340,60); hA.mesh.position.set(-0.06,0.34,0); vrGroup.add(hA.mesh); drawHeader(hA,"FOLD A");
+  FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldA",value:v,selected:v===foldA};
+    lab.mesh.position.set(-0.24+i*0.12,0.22,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
+  const hB=makeLabel(0.34,0.06,340,60); hB.mesh.position.set(-0.06,0.08,0); vrGroup.add(hB.mesh); drawHeader(hB,"FOLD B");
+  FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldB",value:v,selected:v===foldB};
+    lab.mesh.position.set(-0.24+i*0.12,-0.04,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
+  const ml=makeLabel(0.5,0.1,500,120); const mt={lab:ml,mesh:ml.mesh,kind:"mode",value:"mode",selected:false};
+  ml.mesh.position.set(0,-0.24,0); vrGroup.add(ml.mesh); vrTiles.push(mt); drawTile(mt);
+  const instr=makeLabel(0.62,0.05,620,50); instr.mesh.position.set(0,-0.38,0); vrGroup.add(instr.mesh);
+  instr.ctx.fillStyle="#5a6884"; instr.ctx.font="22px monospace"; instr.ctx.textAlign="center"; instr.ctx.textBaseline="middle";
+  instr.ctx.fillText("point + trigger to set · aim at arena, hold to charge",310,25); instr.tex.needsUpdate=true;
+}
+function buildVRReadout(){ const lab=makeLabel(0.85,0.6,560,400); lab.mesh.position.set(0.95,1.15,-1.5); lab.mesh.rotation.y=-0.5; lab.mesh.visible=false; scene.add(lab.mesh); vrReadout=lab; drawReadout(); }
+function drawReadout(){
+  if(!vrReadout) return; const {ctx,canvas}=vrReadout,W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="rgba(10,15,26,0.92)"; rr(ctx,0,0,W,H,24); ctx.fill(); ctx.lineWidth=3; ctx.strokeStyle="#1c2740"; ctx.stroke();
+  ctx.textAlign="left"; ctx.textBaseline="top";
+  ctx.fillStyle=vrState.vColor||"#5a6884"; ctx.font="bold 44px monospace"; ctx.fillText(vrState.verdict||"— idle —",28,26);
+  ctx.font="28px monospace"; let y=98; const line=(k,v)=>{ ctx.fillStyle="#5a6884"; ctx.fillText(k,28,y); ctx.fillStyle="#eef3fb"; ctx.fillText(v,210,y); y+=46; };
+  line("inputs",vrState.inputs); line("product",vrState.prod);
+  line("M",(vrState.M)+"   "+(vrState.kind||"")); line("σ / thr",vrState.thr); line("lifetime",vrState.life);
+  vrReadout.tex.needsUpdate=true;
+}
+function tileHitFor(c){
+  tempMatrix.identity().extractRotation(c.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld);
+  raycaster.ray.direction.set(0,0,-1).applyMatrix4(tempMatrix);
+  const hits=raycaster.intersectObjects(vrTiles.map(t=>t.mesh),false);
+  return hits.length ? vrTiles.find(t=>t.mesh===hits[0].object) : null;
+}
+function markSelected(kind,val){ vrTiles.forEach(t=>{ if(t.kind===kind){ t.selected=(t.value===val); drawTile(t); } });
+  const btn=document.getElementById(kind); if(btn) btn.textContent=val; }
+function applyTile(t){
+  if(t.kind==="foldA"){ foldA=t.value; markSelected("foldA",foldA); }
+  else if(t.kind==="foldB"){ foldB=t.value; markSelected("foldB",foldB); }
+  else if(t.kind==="mode"){ mode=(mode==="prod")?"annih":"prod"; syncMode(); drawTile(t); }
+  makeInputs();
+}
+function onSelectStart(c){ const t=tileHitFor(c);
+  if(t){ applyTile(t); menuInteract=true; return; }
+  if(state==="idle"){ charging=true; chargeT=0; } }
+function onSelectEnd(c){
+  if(menuInteract){ menuInteract=false; return; }
+  if(charging){ charging=false; energy=Math.min(12,chargeT); syncEnergy(); if(state==="idle"){ makeInputs(); fire(); } } }
+
 function tick(t,frame){
   const dt = 1/72;
   clock += dt;
   // idle bob + spin
   [cA,cB].forEach(c=>{ if(c){ c.rotation.y+=dt*0.8; c.rotation.x+=dt*0.3; } });
   if(product){ product.rotation.y+=dt*1.1; product.rotation.x+=dt*0.4; }
+
+  // VR tile hover feedback
+  if(vrGroup && vrGroup.visible){
+    vrTiles.forEach(t=>t.mesh.scale.setScalar(1));
+    controllers.forEach(c=>{ const t=tileHitFor(c); if(t) t.mesh.scale.setScalar(1.18); });
+  }
 
   if(charging){ chargeT=Math.min(12, chargeT+dt*4.0); energy=chargeT; syncEnergy();
     [cA,cB].forEach(c=>{ if(c){ const s=1+0.15*Math.sin(clock*18); c.scale.setScalar(s);} }); }
