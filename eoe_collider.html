@@ -13,9 +13,16 @@
   #top{position:absolute;top:14px;left:16px;right:16px;display:flex;justify-content:space-between;
     align-items:flex-start;gap:12px;}
   h1{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);margin:0;font-weight:500;}
-  #enter{pointer-events:auto;background:#0d1422;color:var(--ink);border:1px solid #1c2740;
+  #enter,#atlasbtn{pointer-events:auto;background:#0d1422;color:var(--ink);border:1px solid #1c2740;
     border-radius:10px;padding:10px 16px;font:inherit;font-size:13px;cursor:pointer;}
-  #enter:hover{border-color:var(--pos);}
+  #enter:hover,#atlasbtn:hover{border-color:var(--pos);}
+  #atlaslist{position:absolute;left:16px;top:60px;width:252px;max-height:72vh;overflow:auto;
+    background:rgba(10,15,26,.92);border:1px solid #1c2740;border-radius:12px;padding:8px;
+    pointer-events:auto;display:none;}
+  #atlaslist button{display:block;width:100%;text-align:left;background:#0d1422;color:var(--ink);
+    border:1px solid #1c2740;border-radius:8px;padding:7px 10px;margin:4px 0;font:inherit;font-size:12px;cursor:pointer;}
+  #atlaslist button:hover{border-color:var(--pos);}
+  #atlaslist .back{color:var(--neu);border-color:var(--neu);}
   #panel{position:absolute;left:16px;bottom:16px;background:rgba(10,15,26,.82);border:1px solid #1c2740;
     border-radius:12px;padding:14px 16px;min-width:260px;pointer-events:auto;}
   .row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:12px;}
@@ -35,13 +42,17 @@
 <div id="ui">
   <div id="top">
     <h1>EoE&nbsp;·&nbsp;Closure Collider</h1>
-    <button id="enter">Enter VR</button>
+    <div style="display:flex;gap:8px;pointer-events:auto">
+      <button id="atlasbtn">⚛ LHC Atlas</button>
+      <button id="enter">Enter VR</button>
+    </div>
   </div>
+  <div id="atlaslist"></div>
   <div id="panel">
     <div class="row"><label>mode</label>
       <button class="ctl" id="mode">PRODUCTION (same)</button></div>
     <div class="row"><label>beam Σ</label>
-      <input type="range" id="energy" min="0" max="12" step="0.1" value="2">
+      <input type="range" id="energy" min="0" max="50" step="0.25" value="2">
       <span id="eval">2.0</span></div>
     <div class="row"><label>fold A</label><button class="ctl" id="foldA">2</button>
       <label style="width:auto">fold B</label><button class="ctl" id="foldB">2</button></div>
@@ -74,6 +85,7 @@ const nest  = (a,b) => a*b;                 // nesting composition (derived this
 const thr   = (q,a,b) => Math.max(0, sigma(q)-sigma(a)-sigma(b));
 const life  = q => stable(q) ? (Mof(q)/(4/PI))*6.0 : 0.0;   // seconds; ~0 if unstable
 const FOLDS = [2,3,5,7,11];                  // selectable input folds
+const SMAX  = 50;                            // max injectable Σ (UI range, not a physics limit)
 
 // ---- three.js scene ----
 let scene, camera, renderer, rig;
@@ -102,6 +114,7 @@ function knot(qfold, wwind, color, scaleR){
 function makeInputs(){
   if(cA) scene.remove(cA); if(cB) scene.remove(cB);
   if(product){ scene.remove(product); product=null; }
+  if(specimen){ scene.remove(specimen); specimen=null; }
   clearPhotons();
   const colB = (mode==="annih") ? COL.neg : COL.pos;
   cA = knot(foldA, 1, COL.pos, 0.13); cA.position.set(-0.9, 1.3, -1.6);
@@ -180,6 +193,21 @@ let controllers=[], vrTiles=[], vrGroup=null, vrReadout=null, menuInteract=false
 const raycaster=new THREE.Raycaster(), tempMatrix=new THREE.Matrix4();
 let vrState={verdict:"— idle —",vColor:"#5a6884",inputs:"(1,2) + (1,2)",prod:"—",M:"—",kind:"",thr:"—",life:"—",explain:"Collide two closures: same polarity fuses (a×b), mirror annihilates."};
 let frozen=false, chargeBar=null, chargeFill=null, chargeTick=null, chargeLab=null;
+let atlas=false, atlasIdx=-1, specimen=null, vrHeaderA=null, vrHeaderB=null;
+
+// ---- real particles discovered at the LHC (masses measured; EoE column is interpretation) ----
+const PARTICLES=[
+ {sym:"H\u2070",name:"Higgs boson",mass:125.25,charge:0,spin:"0",where:"ATLAS+CMS",year:2012,comp:"fundamental scalar",kind:"boson — FUNDAMENTAL",note:"unstable, \u03c4~10\u207b\u00b2\u00b2s",eoe:"the field's own self-closure — pure stored order, no sub-parts. The LHC's only fundamental find."},
+ {sym:"\u03c7b",name:"\u03c7_b(3P)",mass:10.53,charge:0,spin:"?",where:"ATLAS",year:2011,comp:"bb\u0304 bottomonium",kind:"conventional meson",note:"first new state at the LHC",eoe:"a heavy closure-pair in a loose orbit; high \u03c3 from two bottom cores."},
+ {sym:"\u039ecc",name:"\u039ecc\u207a\u207a",mass:3.62,charge:2,spin:"1/2",where:"LHCb",year:2017,comp:"ccu baryon (doubly charmed)",kind:"conventional baryon",note:"weakly decaying",eoe:"three nested closures, two heavy charm cores → double-plus polarity."},
+ {sym:"Pc",name:"Pc(4312)\u207a",mass:4.31,charge:1,spin:"?",where:"LHCb",year:2019,comp:"uud cc\u0304 (5 quarks)",kind:"pentaquark — EXOTIC",note:"narrow resonance",eoe:"a baryon-closure with a meson-closure docked — EoE reads it as nesting, not a new prime."},
+ {sym:"Pc\u2032",name:"Pc(4457)\u207a",mass:4.46,charge:1,spin:"?",where:"LHCb",year:2019,comp:"uud cc\u0304 (5 quarks)",kind:"pentaquark — EXOTIC",note:"narrow resonance",eoe:"a sibling pentaquark, slightly higher \u03c3 — same nesting, a touch more order."},
+ {sym:"Tcc",name:"Tcc\u207a",mass:3.875,charge:1,spin:"1",where:"LHCb",year:2021,comp:"cc\u016b d\u0304 tetraquark",kind:"tetraquark — EXOTIC",note:"~273 keV below threshold — barely bound, strikingly long-lived",eoe:"two charm + two light cores; margin razor-thin. The closest thing to a stable exotic — a near-zero-M closure that still holds."},
+ {sym:"X69",name:"X(6900)",mass:6.90,charge:0,spin:"?",where:"LHCb",year:2020,comp:"cc\u0304cc\u0304 (all-charm)",kind:"tetraquark — EXOTIC",note:"broad, \u0393~80 MeV",eoe:"four heavy charm cores — maximal stored order for charm-only; a dense high-\u03c3 knot."},
+ {sym:"Z44",name:"Zc(4430)\u207a",mass:4.43,charge:1,spin:"1",where:"LHCb",year:2014,comp:"cc\u0304 + charged light pair",kind:"tetraquark-like — EXOTIC",note:"confirmed by LHCb",eoe:"charged charmonium-like — the charge proves it can't be plain cc\u0304, so EoE reads extra docked structure."},
+ {sym:"X29",name:"X(2900)",mass:2.90,charge:0,spin:"?",where:"LHCb",year:2020,comp:"csu\u0304d\u0304 open-charm",kind:"tetraquark — EXOTIC",note:"two states observed",eoe:"open-charm four-closure — lighter, lower \u03c3; a simpler exotic knot."},
+ {sym:"Bc*",name:"Bc(2S)\u207a",mass:6.87,charge:1,spin:"0",where:"CMS+LHCb",year:2019,comp:"bc\u0304 excited meson",kind:"conventional meson",note:"excited state",eoe:"a two-core closure, one bottom + one charm — an excited, higher-\u03c3 rung of the Bc ladder."}
+];
 
 function setVerdict(t,c){ const v=document.getElementById("verdict"); v.textContent=t; v.style.color=c;
   vrState.verdict=t; vrState.vColor=c; drawReadout(); }
@@ -253,11 +281,21 @@ function bindUI(){
   document.getElementById("energy").oninput=e=>{ energy=parseFloat(e.target.value); document.getElementById("eval").textContent=energy.toFixed(2); };
   document.getElementById("foldA").onclick=()=>{ foldA=FOLDS[(FOLDS.indexOf(foldA)+1)%FOLDS.length]; document.getElementById("foldA").textContent=foldA; makeInputs(); };
   document.getElementById("foldB").onclick=()=>{ foldB=FOLDS[(FOLDS.indexOf(foldB)+1)%FOLDS.length]; document.getElementById("foldB").textContent=foldB; makeInputs(); };
-  document.getElementById("fire").onclick=()=>{ if(!frozen && state==="idle"){ makeInputs(); fire(); } };
+  document.getElementById("fire").onclick=()=>{ if(!frozen && !atlas && state==="idle"){ makeInputs(); fire(); } };
   document.getElementById("freeze").onclick=()=>{ frozen=!frozen; syncFreezeBtn(); };
-  document.getElementById("reset").onclick=()=>{ frozen=false; syncFreezeBtn(); state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884"); };
-  addEventListener("keydown",e=>{ if(e.code==="Space"){ e.preventDefault(); if(!frozen && state==="idle"){makeInputs();fire();} else {frozen=false;syncFreezeBtn();state="idle";bounce=false;makeInputs();setVerdict("— idle —","#5a6884");} }});
+  document.getElementById("reset").onclick=()=>{ frozen=false; syncFreezeBtn(); if(atlas){backToCollider();} else {state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884");} };
+  addEventListener("keydown",e=>{ if(e.code==="Space"){ e.preventDefault(); if(!frozen && !atlas && state==="idle"){makeInputs();fire();} else {frozen=false;syncFreezeBtn(); if(atlas){backToCollider();} else {state="idle";bounce=false;makeInputs();setVerdict("— idle —","#5a6884");}} }});
+  buildAtlasList();
+  document.getElementById("atlasbtn").onclick=()=>{ const l=document.getElementById("atlaslist"); l.style.display = (l.style.display==="block")?"none":"block"; };
   syncMode();
+}
+function buildAtlasList(){
+  const l=document.getElementById("atlaslist"); l.innerHTML="";
+  const back=document.createElement("button"); back.className="back"; back.textContent="◀ back to collider";
+  back.onclick=()=>{ backToCollider(); }; l.appendChild(back);
+  PARTICLES.forEach((p,i)=>{ const b=document.createElement("button");
+    b.innerHTML=`<b>${p.name}</b><br><span style="color:var(--faint)">${p.mass} GeV · ${p.kind} · ${p.where} ${p.year}</span>`;
+    b.onclick=()=>{ enterAtlas(i); }; l.appendChild(b); });
 }
 
 async function enterVR(){
@@ -283,18 +321,22 @@ function makeLabel(w,h,cw,ch){
 function drawTile(t){
   const {ctx,canvas}=t.lab, W=canvas.width, H=canvas.height; ctx.clearRect(0,0,W,H);
   const isNum = (t.kind==="foldA"||t.kind==="foldB");
-  const accent = isNum && t.selected;
+  const atlasOn = atlas && isNum;
+  const accent = isNum && (atlasOn ? (t.idx===atlasIdx) : t.selected);
   ctx.fillStyle = accent ? "#f3b13c" : "#0d1422"; rr(ctx,6,6,W-12,H-12,18); ctx.fill();
   ctx.lineWidth=5;
   let border="#1c2740";
   if(t.kind==="exit") border="#e0625a";
   else if(t.kind==="freeze") border = t.selected? "#f3b13c" : "#34c6d6";
+  else if(t.kind==="atlas") border = atlas? "#f3b13c" : "#34c6d6";
   else if(accent||t.kind==="mode") border="#f3b13c";
   ctx.strokeStyle=border; ctx.stroke();
   ctx.textAlign="center"; ctx.textBaseline="middle";
   if(t.kind==="mode"){ ctx.fillStyle="#eef3fb"; ctx.font="bold 30px monospace"; ctx.fillText(mode==="prod"?"PRODUCTION":"ANNIHILATE",W/2,H/2); }
   else if(t.kind==="exit"){ ctx.fillStyle="#e0625a"; ctx.font="bold 30px monospace"; ctx.fillText("\u2715 EXIT VR",W/2,H/2); }
   else if(t.kind==="freeze"){ ctx.fillStyle=t.selected?"#f3b13c":"#eef3fb"; ctx.font="bold 30px monospace"; ctx.fillText(t.selected?"\u275A\u275A FROZEN":"\u275A\u275A FREEZE",W/2,H/2); }
+  else if(t.kind==="atlas"){ ctx.fillStyle=atlas?"#f3b13c":"#eef3fb"; ctx.font="bold 28px monospace"; ctx.fillText(atlas?"\u25c0 COLLIDER":"\u269b LHC ATLAS",W/2,H/2); }
+  else if(atlasOn){ const p=PARTICLES[t.idx]; ctx.fillStyle = accent ? "#05070d" : "#eef3fb"; ctx.font="bold 40px monospace"; ctx.fillText(p?p.sym:"",W/2,H/2); }
   else { ctx.fillStyle = accent ? "#05070d" : "#eef3fb"; ctx.font="bold 66px monospace"; ctx.fillText(String(t.value),W/2,H/2); }
   t.lab.tex.needsUpdate=true;
 }
@@ -302,19 +344,21 @@ function drawHeader(lab,text){ const {ctx,canvas}=lab,W=canvas.width,H=canvas.he
   ctx.fillStyle="#5a6884"; ctx.font="bold 30px monospace"; ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.fillText(text,8,H/2); lab.tex.needsUpdate=true; }
 function buildVRMenu(){
   vrGroup=new THREE.Group(); vrGroup.position.set(-0.95,1.0,-1.5); vrGroup.rotation.y=0.5; scene.add(vrGroup); vrGroup.visible=false; vrTiles=[];
-  const hA=makeLabel(0.34,0.06,340,60); hA.mesh.position.set(-0.06,0.42,0); vrGroup.add(hA.mesh); drawHeader(hA,"FOLD A");
-  FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldA",value:v,selected:v===foldA};
-    lab.mesh.position.set(-0.24+i*0.12,0.30,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
-  const hB=makeLabel(0.34,0.06,340,60); hB.mesh.position.set(-0.06,0.16,0); vrGroup.add(hB.mesh); drawHeader(hB,"FOLD B");
-  FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldB",value:v,selected:v===foldB};
-    lab.mesh.position.set(-0.24+i*0.12,0.04,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
+  vrHeaderA=makeLabel(0.34,0.06,340,60); vrHeaderA.mesh.position.set(-0.06,0.46,0); vrGroup.add(vrHeaderA.mesh); drawHeader(vrHeaderA,"FOLD A");
+  FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldA",value:v,idx:i,selected:v===foldA};
+    lab.mesh.position.set(-0.24+i*0.12,0.34,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
+  vrHeaderB=makeLabel(0.34,0.06,340,60); vrHeaderB.mesh.position.set(-0.06,0.22,0); vrGroup.add(vrHeaderB.mesh); drawHeader(vrHeaderB,"FOLD B");
+  FOLDS.forEach((v,i)=>{ const lab=makeLabel(0.1,0.1,128,128); const t={lab,mesh:lab.mesh,kind:"foldB",value:v,idx:5+i,selected:v===foldB};
+    lab.mesh.position.set(-0.24+i*0.12,0.10,0); vrGroup.add(lab.mesh); vrTiles.push(t); drawTile(t); });
   const ml=makeLabel(0.5,0.1,500,120); const mt={lab:ml,mesh:ml.mesh,kind:"mode",value:"mode",selected:false};
-  ml.mesh.position.set(0,-0.12,0); vrGroup.add(ml.mesh); vrTiles.push(mt); drawTile(mt);
+  ml.mesh.position.set(0,-0.06,0); vrGroup.add(ml.mesh); vrTiles.push(mt); drawTile(mt);
+  const al=makeLabel(0.5,0.1,500,120); const at={lab:al,mesh:al.mesh,kind:"atlas",value:"atlas",selected:false};
+  al.mesh.position.set(0,-0.20,0); vrGroup.add(al.mesh); vrTiles.push(at); drawTile(at);
   const fl=makeLabel(0.5,0.1,500,120); const ft={lab:fl,mesh:fl.mesh,kind:"freeze",value:"freeze",selected:false};
-  fl.mesh.position.set(0,-0.26,0); vrGroup.add(fl.mesh); vrTiles.push(ft); drawTile(ft);
+  fl.mesh.position.set(0,-0.34,0); vrGroup.add(fl.mesh); vrTiles.push(ft); drawTile(ft);
   const xl=makeLabel(0.5,0.1,500,120); const xt={lab:xl,mesh:xl.mesh,kind:"exit",value:"exit",selected:false};
-  xl.mesh.position.set(0,-0.40,0); vrGroup.add(xl.mesh); vrTiles.push(xt); drawTile(xt);
-  const instr=makeLabel(0.62,0.05,620,50); instr.mesh.position.set(0,-0.52,0); vrGroup.add(instr.mesh);
+  xl.mesh.position.set(0,-0.48,0); vrGroup.add(xl.mesh); vrTiles.push(xt); drawTile(xt);
+  const instr=makeLabel(0.62,0.05,620,50); instr.mesh.position.set(0,-0.58,0); vrGroup.add(instr.mesh);
   instr.ctx.fillStyle="#5a6884"; instr.ctx.font="22px monospace"; instr.ctx.textAlign="center"; instr.ctx.textBaseline="middle";
   instr.ctx.fillText("point + trigger to set · aim at arena, hold to charge",310,25); instr.tex.needsUpdate=true;
 }
@@ -345,8 +389,8 @@ function buildChargeBar(){
 function setChargeFill(frac){ frac=Math.max(0,Math.min(1,frac)); chargeFill.scale.x=Math.max(0.001,frac); chargeFill.position.x=-0.33*(1-frac); }
 function updateChargeTick(){
   if(!chargeTick) return;
-  if(mode==="prod"){ const need=thr(nest(foldA,foldB),foldA,foldB); const f=need/12;
-    chargeTick.visible = need>0 && need<=12; chargeTick.position.x = -0.33 + 0.66*f; }
+  if(mode==="prod"){ const need=thr(nest(foldA,foldB),foldA,foldB); const f=need/SMAX;
+    chargeTick.visible = need>0 && need<=SMAX; chargeTick.position.x = -0.33 + 0.66*f; }
   else { chargeTick.visible=false; }
 }
 function drawCharge(){ const {ctx,canvas}=chargeLab,W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
@@ -367,7 +411,9 @@ function syncFreezeBtn(){ const b=document.getElementById("freeze"); if(b) b.tex
   const ft=vrTiles.find(t=>t.kind==="freeze"); if(ft){ ft.selected=frozen; drawTile(ft); } }
 function applyTile(t){
   if(t.kind==="exit"){ const s=renderer.xr.getSession(); if(s){ s.end(); } return; }
+  if(t.kind==="atlas"){ if(atlas){ backToCollider(); } else { enterAtlas(0); } const at=vrTiles.find(x=>x.kind==="atlas"); if(at) drawTile(at); return; }
   if(t.kind==="freeze"){ frozen=!frozen; syncFreezeBtn(); return; }
+  if((t.kind==="foldA"||t.kind==="foldB") && atlas){ if(t.idx<PARTICLES.length) showSpecimen(t.idx); redrawFoldTiles(); return; }
   if(t.kind==="foldA"){ foldA=t.value; markSelected("foldA",foldA); }
   else if(t.kind==="foldB"){ foldB=t.value; markSelected("foldB",foldB); }
   else if(t.kind==="mode"){ mode=(mode==="prod")?"annih":"prod"; syncMode(); drawTile(t); }
@@ -375,11 +421,42 @@ function applyTile(t){
 }
 function onSelectStart(c){ const t=tileHitFor(c);
   if(t){ applyTile(t); menuInteract=true; return; }
-  if(frozen) return;
+  if(frozen||atlas) return;
   if(state==="idle"){ charging=true; chargeT=0; } }
 function onSelectEnd(c){
   if(menuInteract){ menuInteract=false; return; }
-  if(charging){ charging=false; energy=Math.min(12,chargeT); syncEnergy(); if(state==="idle"){ makeInputs(); fire(); } } }
+  if(charging){ charging=false; energy=Math.min(SMAX,chargeT); syncEnergy(); if(state==="idle"){ makeInputs(); fire(); } } }
+
+// ---- particle atlas (inspect a real LHC find) ----
+function showSpecimen(i){
+  atlasIdx=i; const p=PARTICLES[i];
+  if(cA){scene.remove(cA);cA=null;} if(cB){scene.remove(cB);cB=null;}
+  if(product){scene.remove(product);product=null;} clearPhotons();
+  if(specimen){scene.remove(specimen);specimen=null;}
+  const qv=Math.max(3,Math.min(18,Math.round(3+5*Math.log10(p.mass))));
+  const col = p.charge>0?COL.pos : (p.charge<0?COL.neg:COL.neu);
+  specimen=new THREE.Mesh(new THREE.TorusKnotGeometry(0.18,0.05,170,14,1,qv),
+    new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.7,metalness:0.2,roughness:0.4}));
+  specimen.position.set(0,1.3,-1.6); scene.add(specimen);
+  state="atlas";
+  setVerdict(p.name, p.charge>0?"#f3b13c":(p.charge<0?"#34c6d6":"#74d6a4"));
+  setReadout({prod:p.comp, M:`${p.mass} GeV`, kind:p.kind,
+    thr:`charge ${p.charge>0?'+':''}${p.charge}, spin ${p.spin} · ${p.where} ${p.year}`,
+    life:p.note,
+    explain:`EoE reading: ${p.eoe}  (knot complexity ∝ mass = stored order — illustrative, not a derived (w,q).)`});
+}
+function enterAtlas(i){ atlas=true; showSpecimen(i); redrawFoldTiles(); }
+function backToCollider(){ atlas=false; atlasIdx=-1;
+  if(specimen){scene.remove(specimen);specimen=null;}
+  state="idle"; bounce=false; makeInputs(); setVerdict("— idle —","#5a6884");
+  setReadout({prod:"—",M:"—",kind:"",thr:"—",life:"—",explain:"Collide two closures: same polarity fuses (a×b), mirror annihilates."});
+  redrawFoldTiles();
+}
+function redrawFoldTiles(){
+  vrTiles.forEach(t=>{ if(t.kind==="foldA"||t.kind==="foldB") drawTile(t); });
+  if(vrHeaderA) drawHeader(vrHeaderA, atlas?"LHC PARTICLES":"FOLD A");
+  if(vrHeaderB) drawHeader(vrHeaderB, atlas?"(point to inspect)":"FOLD B");
+}
 
 function tick(t,frame){
   const dt = 1/72;
@@ -393,10 +470,11 @@ function tick(t,frame){
     clock += dt;
     [cA,cB].forEach(c=>{ if(c){ c.rotation.y+=dt*0.8; c.rotation.x+=dt*0.3; } });
     if(product){ product.rotation.y+=dt*1.1; product.rotation.x+=dt*0.4; }
+    if(specimen){ specimen.rotation.y+=dt*0.6; specimen.rotation.x+=dt*0.22; }
 
-    if(charging){ chargeT=Math.min(12, chargeT+dt*4.0); energy=chargeT; syncEnergy();
+    if(charging){ chargeT=Math.min(SMAX, chargeT+dt*(SMAX/4)); energy=chargeT; syncEnergy();
       [cA,cB].forEach(c=>{ if(c){ const s=1+0.15*Math.sin(clock*18); c.scale.setScalar(s);} });
-      if(chargeBar){ chargeBar.visible=true; setChargeFill(chargeT/12); drawCharge(); } }
+      if(chargeBar){ chargeBar.visible=true; setChargeFill(chargeT/SMAX); drawCharge(); } }
     else if(chargeBar){ chargeBar.visible=false; }
 
     if(state==="incoming"){
