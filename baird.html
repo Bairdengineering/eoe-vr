@@ -285,7 +285,28 @@ function makeAtomWorld(elem){
   return {kind:'atom',name:elem,surfKey:elem,children:[],
     label:elem+' \u00b7 atom rung'};
 }
-function surfOf(w){ return w.kind==='molecule'?SURF[w.surfKey]:ATOMSURF[w.surfKey]; }
+// membrane rung: the boundary between a parent closure and one chosen child.
+// DERIVED, not hard-coded — content comes entirely from the parent's substrate children.
+function makeMembraneWorld(parent, childIdx){
+  const ch=parent.children[childIdx];
+  return {kind:'membrane', name:parent.name+' · '+ch.label+' pore',
+    surfKey:parent.surfKey,
+    parentKind:parent.kind, parentName:parent.name,
+    childElem:ch.elem, childLabel:ch.label,
+    pool:parent.children,
+    children:[ch],
+    label:parent.name+' → '+ch.label+' (membrane)'};
+}
+function nextRungFrom(w, k){
+  if(w.kind==='molecule') return makeMembraneWorld(w, k.idx);
+  if(w.kind==='membrane') return makeAtomWorld(w.childElem);
+  return null;
+}
+function surfOf(w){
+  if(w.kind==='molecule') return SURF[w.surfKey];
+  if(w.kind==='membrane') return SURF[w.surfKey];
+  return ATOMSURF[w.surfKey];
+}
 
 function renderWorld(w){
   clearGroup();
@@ -302,6 +323,12 @@ function renderWorld(w){
   if(w.kind==='molecule'){
     const cc=CLOSURES[w.name]; const gg=generateGeometry(cc.elems,cc.bonds);
     readout(w.name,gg); drawWell(w.name); document.getElementById('well').style.display='block';
+  } else if(w.kind==='membrane'){
+    document.getElementById('well').innerHTML='';
+    document.getElementById('readout').innerHTML=
+      '<span class="k">rung</span> <b>membrane</b> · '+w.parentName+' → '+w.childLabel+'<br>'+
+      '<span class="k">where you are</span> standing in the boundary — the wall is the parent M=0, the pore ahead opens into '+w.childLabel+'<br>'+
+      '<span class="k">pore pool</span> '+w.pool.map(c=>c.label).join(', ')+' (the siblings around the opening)';
   } else {
     document.getElementById('well').innerHTML='';
     document.getElementById('readout').innerHTML=
@@ -317,6 +344,16 @@ function renderWorld(w){
 
 // grounded rung scale, computed from the substrate method (vsize/blen), in angstrom
 function realRadiusA(w){
+  if(w.kind==='membrane'){
+    const pr = (w.parentKind==='molecule')
+      ? (function(){ const c=CLOSURES[w.parentName]; const gg=generateGeometry(c.elems,c.bonds);
+          let r=0; gg.pos.forEach(p=>{const d=Math.hypot(p[0],p[1],p[2]); if(d>r)r=d;});
+          return r + vsize(c.elems[0]); })()
+      : vsize(w.parentName);
+    const cr = vsize(w.childElem);
+    const t = (typeof descentT==='number' && _trans) ? Math.max(0,Math.min(1,descentT)) : 0.5;
+    return Math.pow(pr, 1-t) * Math.pow(cr, t);
+  }
   if(w.kind==='molecule'){
     const c=CLOSURES[w.name]; const gg=generateGeometry(c.elems,c.bonds);
     let r=0; gg.pos.forEach(p=>{const d=Math.hypot(p[0],p[1],p[2]); if(d>r)r=d;});
@@ -350,7 +387,8 @@ function pickChild(w){
 let descentT=0, _childSkins=[], _baseFOV=45, _throatFOV=24;
 function beginDescent(){
   const w=STACK[STACK.length-1]; const k=pickChild(w); if(!k) return false;
-  _descChild=makeAtomWorld(w.children[k.idx].elem);
+  if(!nextRungFrom(w,k)) return false;
+  _descChild=nextRungFrom(w, k);
   // render the child surface now, faded to 0, so it can rise as the parent fades
   const sd=surfOf(_descChild); _childSkins=[];
   if(sd){ const meshes=renderSurface(sd); meshes.forEach(m=>{ if(m.material){m.material.transparent=true; m.material.opacity=0; m.userData.child=true;} _childSkins.push(m); }); }
