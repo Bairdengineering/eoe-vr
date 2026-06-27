@@ -290,7 +290,7 @@ function surfOf(w){ return w.kind==='molecule'?SURF[w.surfKey]:ATOMSURF[w.surfKe
 function renderWorld(w){
   clearGroup();
   const sd0=surfOf(w);
-  if(!_story) camera.position.z=frameDistance(sd0);
+  if(!_story && !_trans) camera.position.z=frameDistance(sd0);
   group.rotation.set(rx,ry,0);
   // the world's OWN M=0 boundary, full size
   const sd=surfOf(w); if(sd) renderSurface(sd);
@@ -344,24 +344,48 @@ function pickChild(w){
   return best;
 }
 
-function descend(){
-  const w=STACK[STACK.length-1]; const k=pickChild(w); if(!k||_trans) return;
-  _trans=true;
-  const child=makeAtomWorld(w.children[k.idx].elem);
-  // push THROUGH: dive toward the chosen closure, fade this world out
-  const t0=performance.now(), dur=620, z0=camera.position.z;
-  (function step(){ const p=Math.min(1,(performance.now()-t0)/dur);
-    camera.position.z=z0+(0.6-z0)*(p*p);
-    group.children.forEach(m=>{ if(m.material){m.material.transparent=true;
-      m.material.opacity=(m.material.opacity||0.6)*(1-0.06);} });
-    if(p<1) requestAnimationFrame(step);
-    else { STACK.push(child); renderWorld(child); _trans=false; }
-  })();
+// ---- continuous thread-through-the-hole descent ----
+// descentT: 0 = fully in parent, 1 = released into child. The scroll advances/retreats it.
+// One driver runs the dolly, the FOV tunnel, the cross-dissolve, and the scale slide.
+let descentT=0, _childSkins=[], _baseFOV=45, _throatFOV=24;
+function beginDescent(){
+  const w=STACK[STACK.length-1]; const k=pickChild(w); if(!k) return false;
+  _descChild=makeAtomWorld(w.children[k.idx].elem);
+  // render the child surface now, faded to 0, so it can rise as the parent fades
+  const sd=surfOf(_descChild); _childSkins=[];
+  if(sd){ const meshes=renderSurface(sd); meshes.forEach(m=>{ if(m.material){m.material.transparent=true; m.material.opacity=0; m.userData.child=true;} _childSkins.push(m); }); }
+  _trans=true; return true;
 }
+function endDescentCommit(){
+  STACK.push(_descChild); _descChild=null; _childSkins=[];
+  _trans=false; descentT=0; camera.fov=_baseFOV; camera.updateProjectionMatrix();
+  renderWorld(STACK[STACK.length-1]);
+}
+function cancelDescent(){
+  _childSkins.forEach(m=>{ group.remove(m); if(m.geometry)m.geometry.dispose(); if(m.material)m.material.dispose(); });
+  _childSkins=[]; _descChild=null; _trans=false; descentT=0;
+  camera.fov=_baseFOV; camera.updateProjectionMatrix();
+}
+let _descChild=null;
+// drive the whole transition from descentT each frame (called in loop when _trans)
+function driveDescent(){
+  const t=descentT;
+  camera.fov = _baseFOV + (_throatFOV-_baseFOV)*Math.sin(Math.min(t,1)*Math.PI); // narrow at throat, back open
+  camera.updateProjectionMatrix();
+  // parent skins fade out, child skins fade in
+  group.children.forEach(m=>{ if(!m.material) return;
+    if(m.userData && m.userData.child) m.material.opacity = Math.min(1, t*1.6);
+    else m.material.opacity = (m.userData.base||0.5) * Math.max(0, 1 - t*1.1); });
+  // scale readout slides continuously
+  const w=STACK[STACK.length-1];
+  if(w && _descChild){ const r0=realRadiusA(w), r1=realRadiusA(_descChild);
+    const rA=r0+(r1-r0)*t; const ro=document.getElementById('slidelbl');
+    if(ro) ro.innerHTML='threading the boundary — rung ≈ '+fmtA(2*rA)+' across'; }
+}
+// ascend: reverse out of the current child back to its parent
 function ascend(){
   if(STACK.length<2||_trans) return;
-  STACK.pop(); const w=STACK[STACK.length-1];
-  renderWorld(w);
+  STACK.pop(); renderWorld(STACK[STACK.length-1]);
 }
 
 function build(name){ rx=0.3; ry=0.5; STACK=[makeMoleculeWorld(name)]; renderWorld(STACK[0]); }
@@ -524,10 +548,17 @@ function drawFrame(i){
 /* ---- boundary crossing: scroll past the membrane to descend/ascend a rung ---- */
 const BOUND_IN=1.5, BOUND_OUT=8.9;
 function checkBoundaryCross(){
-  if(_trans) return;
   const z=camera.position.z; const w=STACK[STACK.length-1]; if(!w) return;
-  if(z<=BOUND_IN && w._kids && w._kids.length){ descend(); }
-  else if(z>=BOUND_OUT && STACK.length>1){ ascend(); }
+  if(!_trans){
+    // entering a descent: past the inner threshold with a child available
+    if(z<=BOUND_IN && w._kids && w._kids.length){ if(beginDescent()) descentT=0.001; }
+    else if(z>=BOUND_OUT && STACK.length>1){ ascend(); }
+  } else {
+    // in a descent: map remaining zoom-in past BOUND_IN to descentT 0..1
+    descentT = Math.max(0, Math.min(1, (BOUND_IN - z)/(BOUND_IN - 1.2)));
+    if(descentT>=1) endDescentCommit();
+    else if(descentT<=0) cancelDescent();
+  }
 }
 /* ---- compression slide: zoom through the boundary into the level below ---- */
 canvas.addEventListener('wheel',e=>{e.preventDefault();
@@ -549,9 +580,9 @@ function loop(){requestAnimationFrame(loop);
     camera.position.z = 8.0 - 2.6*(p*p*(3-2*p));     // smoothstep push-in (Ken Burns)
     ry += 0.0016; }                                   // slow continuous drift
   else if(!down)ry+=0.0025;
-  group.rotation.x=rx; group.rotation.y=ry;
+  group.rotation.x=rx; group.rotation.y=ry; if(_trans) driveDescent();
 
-  { const dz=camera.position.z; const inside=Math.max(0,Math.min(1,(3.9-dz)/(3.9-2.3)));
+  if(!_trans){ const dz=camera.position.z; const inside=Math.max(0,Math.min(1,(3.9-dz)/(3.9-2.3)));
     if(window._skin) window._skin.forEach(m=>{ if(m.material) m.material.opacity=(m.userData.base||0.5)*(1-inside*0.94);});
     if(window._atoms) window._atoms.forEach(m=>{m.material.opacity=inside;});
     if(window.corelight===undefined){} 
