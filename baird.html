@@ -388,6 +388,7 @@ let descentT=0, _childSkins=[], _baseFOV=45, _throatFOV=24;
 function beginDescent(){
   const w=STACK[STACK.length-1]; const k=pickChild(w); if(!k) return false;
   if(!nextRungFrom(w,k)) return false;
+  if(_reactOn){ _reactOn=false; const _sc=document.getElementById('scrub'); if(_sc)_sc.style.display='none'; }
   _descChild=nextRungFrom(w, k);
   // render the child surface now, faded to 0, so it can rise as the parent fades
   const sd=surfOf(_descChild); _childSkins=[];
@@ -426,7 +427,7 @@ function ascend(){
   STACK.pop(); renderWorld(STACK[STACK.length-1]);
 }
 
-function build(name){ rx=0.3; ry=0.5; STACK=[makeMoleculeWorld(name)]; renderWorld(STACK[0]); }
+function build(name){ rx=0.3; ry=0.5; _reactOn=false; STACK=[makeMoleculeWorld(name)]; renderWorld(STACK[0]); }
 
 function readout(name,g){
   const counts={}; g.elems.forEach(e=>counts[e]=(counts[e]||0)+1);
@@ -620,7 +621,7 @@ function loop(){requestAnimationFrame(loop);
   else if(!down)ry+=0.0025;
   group.rotation.x=rx; group.rotation.y=ry; if(_trans) driveDescent();
 
-  if(!_trans){ const dz=camera.position.z; const inside=Math.max(0,Math.min(1,(3.9-dz)/(3.9-2.3)));
+  if(!_trans && !_reactOn){ const dz=camera.position.z; const inside=Math.max(0,Math.min(1,(3.9-dz)/(3.9-2.3)));
     if(window._skin) window._skin.forEach(m=>{ if(m.material) m.material.opacity=(m.userData.base||0.5)*(1-inside*0.94);});
     if(window._atoms) window._atoms.forEach(m=>{m.material.opacity=inside;});
     if(window.corelight===undefined){} 
