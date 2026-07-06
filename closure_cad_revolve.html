@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Closure CAD — Half &amp; Close</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--ground:#0e1417;--view:#0b1013;--grid:#162029;--grid2:#1f2c36;--panel:#141d23;--panel2:#0f161b;--hair:#27343f;--hair2:#324350;
+    --text:#c8d2da;--muted:#7d8ea0;--dim:#4d5d6b;--blue:#5aa0d6;--steel:#9fb3c2;--snap:#7fd1b0;--ghost:#e0a458;--axis:#d6b25a;}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--ground);color:var(--text);font-family:"Space Grotesk",system-ui,sans-serif;touch-action:none}
+  header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--hair);background:linear-gradient(180deg,#131c22,#0e1417);position:relative;z-index:5}
+  .mark{font-weight:700;letter-spacing:.04em;font-size:14px}.mark b{color:var(--blue)}
+  .vtog{display:flex;gap:5px;margin-left:8px}
+  .vtog button{background:var(--panel2);border:1px solid var(--hair2);color:var(--muted);font:600 11.5px "Space Grotesk";padding:5px 12px;border-radius:6px;cursor:pointer}
+  .vtog button.on{border-color:var(--blue);color:#dcefff;background:rgba(90,160,214,.12)}
+  .reset{margin-left:auto;background:var(--panel2);border:1px solid var(--hair2);color:var(--text);font:500 12px "Space Grotesk";padding:6px 12px;border-radius:6px;cursor:pointer}
+  .stage{position:absolute;inset:46px 0 0 0}
+  #flat,#gl{position:absolute;inset:0}
+  #flat{width:100%;height:100%;touch-action:none}#gl{display:none}
+  .side{position:absolute;right:0;top:0;bottom:0;width:280px;background:rgba(20,29,35,.95);border-left:1px solid var(--hair);padding:15px;overflow-y:auto;z-index:4;backdrop-filter:blur(6px)}
+  .grp{margin-bottom:14px}
+  .grp h4{font:600 10px "IBM Plex Mono";letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;border-bottom:1px solid var(--hair);padding-bottom:4px}
+  .step{font:12.5px "Space Grotesk";color:var(--muted);line-height:1.5;margin-bottom:9px}
+  .btn{display:block;width:100%;text-align:center;padding:10px;border-radius:7px;font:600 12.5px "Space Grotesk";cursor:pointer;border:1px solid var(--hair2);background:var(--panel2);color:var(--text);margin-bottom:7px}
+  .btn.go{background:linear-gradient(180deg,#1d4a6b,#163a55);border-color:#2f6c97;color:#dcefff}
+  .btn.on{border-color:var(--snap);background:rgba(127,209,176,.12);color:#cdeee0}
+  .btnrow{display:flex;gap:6px}.btnrow .btn{flex:1}
+  .row{display:flex;align-items:center;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:12px;padding:5px 0}
+  .row label{color:var(--muted)}.row .v{color:var(--steel)}
+  input[type=range]{-webkit-appearance:none;width:120px;height:4px;background:var(--hair2);border-radius:2px;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--steel);cursor:pointer}
+  .note{font:11px "IBM Plex Mono";color:var(--dim);line-height:1.55;margin-top:8px}
+  .hint{position:absolute;left:14px;bottom:12px;font:11px "IBM Plex Mono";color:var(--dim);line-height:1.6;pointer-events:none;z-index:2}
+</style>
+</head>
+<body>
+<header>
+  <div class="mark">AGENT&nbsp;M · <b>Closure CAD</b></div>
+  <div class="vtog"><button class="on" id="vFlat">flat · draw</button><button id="v3d">3D · revolve</button></div>
+  <button class="reset" id="reset">clear</button>
+</header>
+<div class="stage">
+  <canvas id="flat"></canvas>
+  <div id="gl"></div>
+  <div class="hint" id="hint">the gold line is your datum axis — draw half the silhouette on one side, bottom to top</div>
+  <div class="side" id="side"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const SCALE=120;
+const PARTLIB={"anchor_escapement":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.3733333333333333}],"family":"generic","shell":false,"dims_mm":{"outer_mm":1.5,"length_mm":7.5,"bore_mm":0.6},"bore":null,"function":"Locks and releases the escape wheel one tooth per swing and gives the pendulum an impulse each beat."},"ball_bearing":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"bearing","shell":true,"dims_mm":{"outer_mm":185.0,"length_mm":185.0,"bore_mm":101.5},"bore":0.3841,"function":"Supports a rotating shaft with low friction while carrying combined radial and axial loads."},"ball_valve":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.16799999999999998},{"r":0.27999999999999997,"y":0.392},{"r":0.27999999999999997,"y":1.4}],"family":"valve","shell":false,"dims_mm":{"outer_mm":153.0,"length_mm":153.0,"bore_mm":61.2},"bore":null,"function":"Starts, stops, or isolates fluid flow in a line with a quarter-turn of the ball."},"bevel_gear":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.35}],"family":"gear","shell":false,"dims_mm":{"outer_mm":8.25,"length_mm":8.25,"bore_mm":78.0},"bore":null,"function":"Transmits torque between shafts whose axes intersect, typically at 90 degrees, changing drive direction."},"bushing":{"profile":[{"r":0.7508250825082509,"y":0.0},{"r":0.7508250825082509,"y":0.7508250825082509}],"family":"bushing","shell":true,"dims_mm":{"outer_mm":162.5,"length_mm":151.5,"bore_mm":151.5},"bore":0.6382,"function":"Provides a sliding bearing surface for a shaft or pin, carrying radial load with low friction."},"carburetor":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":37.5,"length_mm":37.5,"bore_mm":15.0},"bore":null,"function":"Mixes metered fuel with intake air to supply a combustible charge to the cylinders."},"centrifugal_pump":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":325.0,"length_mm":325.0,"bore_mm":130.0},"bore":null,"function":"Moves large volumes of liquid by imparting kinetic energy via a spinning impeller."},"ceramic_capacitor":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":20.0,"bore_mm":8.0},"bore":null,"function":"stores charge and passes ac while blocking dc to filter, couple, or bypass signals"},"clock_dial":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.16799999999999998}],"family":"dial","shell":false,"dims_mm":{"outer_mm":215.0,"length_mm":215.0,"bore_mm":86.0},"bore":null,"function":"Provides the fixed scale of hours and minutes against which the moving hands are read."},"clock_hands":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.13999999999999999}],"family":"generic","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":100.0,"bore_mm":8.0},"bore":null,"function":"Sweep over the dial driven by the motion work to point out the current hour, minute, and second."},"cotter_pin":{"profile":[{"r":0.14,"y":0.0},{"r":0.14,"y":1.4}],"family":"pin","shell":false,"dims_mm":{"outer_mm":10.3,"length_mm":51.5,"bore_mm":4.12},"bore":null,"function":"Secures a castle nut or clevis pin by locking it against rotation or axial slip."},"cylinder_(engine)":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.13999999999999999}],"family":"cylinder","shell":true,"dims_mm":{"outer_mm":20.0,"length_mm":100.0,"bore_mm":100.0},"bore":0.119,"function":"Contains combustion and guides the piston's stroke while sealing pressure at the head."},"dc_motor":{"profile":[{"r":0.7000000000000001,"y":0.0},{"r":0.7000000000000001,"y":0.7000000000000001}],"family":"generic","shell":false,"dims_mm":{"outer_mm":35.0,"length_mm":35.0,"bore_mm":14.0},"bore":null,"function":"converts dc electrical power into continuous rotary mechanical motion"},"drive_shaft":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":1.4}],"family":"shaft","shell":false,"dims_mm":{"outer_mm":153.0,"length_mm":765.0,"bore_mm":61.2},"bore":null,"function":"Transmits torque and rotation from a driver to a driven component along its axis."},"escape_wheel":{"profile":[{"r":0.27999999999999997,"y":0.0},{"r":0.7,"y":0.0},{"r":0.7,"y":0.19599999999999998},{"r":0.476,"y":0.27999999999999997},{"r":0.7,"y":0.364},{"r":0.7,"y":0.5599999999999999},{"r":0.27999999999999997,"y":0.5599999999999999}],"family":"wheel","shell":false,"dims_mm":{"outer_mm":19.0,"length_mm":19.0,"bore_mm":7.6},"bore":null,"function":"Receives train torque and is released one tooth at a time by the escapement to meter the gear train."},"flange":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.35}],"family":"flange","shell":false,"dims_mm":{"outer_mm":445.0,"length_mm":445.0,"bore_mm":307.5},"bore":null,"function":"Provides a bolted, sealed connection between two pipe or shaft sections."},"flat_washer":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.16799999999999998}],"family":"washer","shell":true,"dims_mm":{"outer_mm":56.0,"length_mm":56.0,"bore_mm":34.5},"bore":0.4312,"function":"Spreads the fastener clamp load over a wider area and protects the bearing surface from marring."},"fuel_tank":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.13999999999999999}],"family":"generic","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":100.0,"bore_mm":8.0},"bore":null,"function":"Stores the gasoline supply and feeds it under gravity or pressure to the carburetor."},"gasket":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.16799999999999998}],"family":"gasket","shell":true,"dims_mm":{"outer_mm":420.0,"length_mm":420.0,"bore_mm":305.0},"bore":0.5083,"function":"Fills flange-face irregularities under bolt load to create a leak-tight static seal."},"hex_bolt":{"profile":[{"r":0.15326797385620913,"y":0.0},{"r":0.15326797385620913,"y":0.15326797385620913}],"family":"generic","shell":false,"dims_mm":{"outer_mm":33.5,"length_mm":153.0,"bore_mm":13.4},"bore":null,"function":"Passes through aligned holes and threads into a nut or tapped hole to draw two members together under tension."},"hydraulic_cylinder":{"profile":[{"r":0.14,"y":0.0},{"r":0.14,"y":0.14}],"family":"cylinder","shell":true,"dims_mm":{"outer_mm":61.0,"length_mm":305.0,"bore_mm":112.5},"bore":0.119,"function":"Converts hydraulic pressure into linear mechanical force and motion for actuation."},"hydraulic_pump":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":20.0,"bore_mm":8.0},"bore":null,"function":"Draws fluid from a reservoir and delivers it at high pressure to drive hydraulic actuators."},"keyway/key":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.27999999999999997}],"family":"generic","shell":false,"dims_mm":{"outer_mm":46.0,"length_mm":230.0,"bore_mm":18.4},"bore":null,"function":"Locks a hub or gear to a shaft so torque transfers without slip between them."},"landing_gear_strut":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.06999999999999999}],"family":"gear","shell":false,"dims_mm":{"outer_mm":42.5,"length_mm":212.5,"bore_mm":17.0},"bore":null,"function":"Carries the airframe weight to the wheels and absorbs landing and taxi loads."},"lock_washer":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.20176470588235296}],"family":"washer","shell":true,"dims_mm":{"outer_mm":34.0,"length_mm":34.0,"bore_mm":21.0},"bore":0.4324,"function":"Applies a spring counter-force under the nut to resist vibration-induced loosening."},"machine_screw":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.13999999999999999}],"family":"generic","shell":false,"dims_mm":{"outer_mm":6.8,"length_mm":34.0,"bore_mm":2.72},"bore":null,"function":"Threads into a tapped hole or nut to fasten light components with a controlled clamp load."},"magneto":{"profile":[{"r":0.38,"y":0.0},{"r":0.38,"y":0.38}],"family":"magneto","shell":false,"dims_mm":{"outer_mm":95.0,"length_mm":175.0,"bore_mm":38.0},"bore":null,"function":"Generates and times high-voltage pulses from engine rotation, without any battery, to fire the spark plugs."},"mainspring":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.13999999999999999}],"family":"ring","shell":true,"dims_mm":{"outer_mm":6.75,"length_mm":33.75,"bore_mm":2.7},"bore":0.056,"function":"Stores winding energy as elastic strain and releases it slowly to drive the clock's gear train."},"microcontroller":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"roller","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":20.0,"bore_mm":8.0},"bore":null,"function":"executes stored firmware to read sensors and control outputs as the system brain"},"nut":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":1.1158208955223878}],"family":"generic","shell":false,"dims_mm":{"outer_mm":33.5,"length_mm":33.5,"bore_mm":13.4},"bore":null,"function":"Threads onto a bolt or stud to react its tension and lock the clamped joint."},"o-ring_seal":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.509090909090909}],"family":"seal","shell":false,"dims_mm":{"outer_mm":5.5,"length_mm":5.5,"bore_mm":300.5},"bore":null,"function":"Seals a static or dynamic gap by elastic compression against mating surfaces to block fluid or gas."},"operational_amplifier":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":1.4}],"family":"generic","shell":false,"dims_mm":{"outer_mm":50050000.0,"length_mm":50050000.0,"bore_mm":20020000.0},"bore":null,"function":"amplifies the difference between two inputs with very high open-loop gain"},"pendulum":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":625.0,"length_mm":625.0,"bore_mm":250.0},"bore":null,"function":"Swings at a near-constant natural period to serve as the clock's isochronous time standard."},"pinion":{"profile":[{"r":0.6124999999999999,"y":0.0},{"r":0.6124999999999999,"y":1.2249999999999999}],"family":"pin","shell":false,"dims_mm":{"outer_mm":1.75,"length_mm":1.75,"bore_mm":0.7},"bore":null,"function":"Meshes with the larger going-train wheels to step the rotation rate through the clock's gear reduction."},"pipe":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.13999999999999999}],"family":"pipe","shell":true,"dims_mm":{"outer_mm":203.0,"length_mm":1015.0,"bore_mm":81.2},"bore":0.056,"function":"Conveys pressurized or gravity fluid flow from one component to another."},"piston":{"profile":[{"r":0.077,"y":0.0},{"r":0.13999999999999999,"y":0.16799999999999998},{"r":0.13999999999999999,"y":1.4},{"r":0.126,"y":1.4}],"family":"piston","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":100.0,"bore_mm":100.0},"bore":null,"function":"Receives combustion gas pressure and transmits the force as reciprocating motion to the connecting rod."},"poppet_valve":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.16799999999999998},{"r":0.27999999999999997,"y":0.392},{"r":0.27999999999999997,"y":1.4}],"family":"valve","shell":false,"dims_mm":{"outer_mm":45.0,"length_mm":45.0,"bore_mm":18.0},"bore":null,"function":"Opens and closes the cylinder's intake or exhaust port in time with the piston cycle."},"potentiometer":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":13.8,"length_mm":13.8,"bore_mm":5.52},"bore":null,"function":"provides a manually adjustable voltage divider or variable resistance via a moving wiper"},"pulley":{"profile":[{"r":0.175,"y":0.0},{"r":0.7,"y":0.0},{"r":0.7,"y":0.19599999999999998},{"r":0.476,"y":0.27999999999999997},{"r":0.7,"y":0.364},{"r":0.7,"y":0.5599999999999999},{"r":0.175,"y":0.5599999999999999}],"family":"pulley","shell":false,"dims_mm":{"outer_mm":460.0,"length_mm":460.0,"bore_mm":78.0},"bore":null,"function":"Carries a belt on its rim to transmit rotary drive between shafts at a set diameter ratio."},"radiator":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":500.0,"length_mm":500.0,"bore_mm":200.0},"bore":null,"function":"Dissipates engine heat by passing hot coolant through thin finned tubes cooled by airflow."},"relay":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":20.0,"bore_mm":8.0},"bore":null,"function":"uses a coil-driven electromagnet to mechanically switch an isolated high-power contact"},"roller_bearing":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"bearing","shell":true,"dims_mm":{"outer_mm":373.0,"length_mm":373.0,"bore_mm":255.0},"bore":0.4786,"function":"Carries high radial (and, if tapered, combined) loads on a rotating shaft with line-contact rollers."},"shaft_coupling":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":1.4}],"family":"shaft","shell":false,"dims_mm":{"outer_mm":260.0,"length_mm":260.0,"bore_mm":103.0},"bore":null,"function":"Connects two coaxial shafts to transmit torque while tolerating slight misalignment."},"snap_ring":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"ring","shell":true,"dims_mm":{"outer_mm":151.5,"length_mm":151.5,"bore_mm":60.6},"bore":0.28,"function":"Retains a bearing, gear, or pin axially on a shaft or in a bore by seating in a groove shoulder."},"spark_plug":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":16.0,"length_mm":16.0,"bore_mm":6.4},"bore":null,"function":"Fires an electric arc across its gap inside the combustion chamber to ignite the compressed air-fuel mixture."},"spoke":{"profile":[{"r":0.13999999999999999,"y":0.0},{"r":0.13999999999999999,"y":0.13999999999999999}],"family":"generic","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":100.0,"bore_mm":8.0},"bore":null,"function":"Ties the hub to the rim in tension so the wheel carries load through many light spokes."},"spur_gear":{"profile":[{"r":0.0706896551724138,"y":0.0},{"r":0.0706896551724138,"y":1.4}],"family":"gear","shell":false,"dims_mm":{"outer_mm":10.25,"length_mm":10.25,"bore_mm":102.0},"bore":null,"function":"Transmits rotary motion and torque between parallel shafts at a fixed speed ratio."},"stepper_motor":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":20.0,"length_mm":20.0,"bore_mm":8.0},"bore":null,"function":"rotates in precise fixed angular steps as its phases are energized in sequence"},"transformer":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.7}],"family":"generic","shell":false,"dims_mm":{"outer_mm":34.0,"length_mm":34.0,"bore_mm":13.6},"bore":null,"function":"transfers ac power between isolated windings while stepping voltage up or down"},"wheel":{"profile":[{"r":0.17500000000000002,"y":0.0},{"r":0.7000000000000001,"y":0.0},{"r":0.7000000000000001,"y":0.196},{"r":0.4760000000000001,"y":0.28},{"r":0.7000000000000001,"y":0.36400000000000005},{"r":0.7000000000000001,"y":0.56},{"r":0.17500000000000002,"y":0.56}],"family":"wheel","shell":false,"dims_mm":{"outer_mm":609.6,"length_mm":609.6,"bore_mm":27.5},"bore":null,"function":"Rolls on the ground on its axle to support and move the aircraft during taxi, takeoff, and landing."},"worm_gear":{"profile":[{"r":0.7,"y":0.0},{"r":0.7,"y":0.35}],"family":"gear","shell":false,"dims_mm":{"outer_mm":64.0,"length_mm":64.0,"bore_mm":25.6},"bore":null,"function":"Delivers a large speed reduction between right-angle shafts, often self-locking against back-drive."}};
+let loadedPart=null;
+let view='flat';
+let raw=null, profile=null, mirror=true, shell=true, segs=40;
+// ---------- flat canvas ----------
+const fc=document.getElementById('flat'),fx=fc.getContext('2d');let FW=0,FH=0,DPR=1,CX=0;
+function cssv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function fitFlat(){const r=fc.getBoundingClientRect();DPR=Math.min(devicePixelRatio||1,2);FW=r.width;FH=r.height;fc.width=FW*DPR;fc.height=FH*DPR;fx.setTransform(DPR,0,0,DPR,0,0);CX=FW*0.5;drawFlat();}
+function drawFlat(){
+  fx.fillStyle=cssv('--view');fx.fillRect(0,0,FW,FH);
+  for(let xx=0;xx<FW;xx+=26){fx.strokeStyle=cssv('--grid');fx.beginPath();fx.moveTo(xx+.5,0);fx.lineTo(xx+.5,FH);fx.stroke();}
+  for(let yy=0;yy<FH;yy+=26){fx.strokeStyle=cssv('--grid');fx.beginPath();fx.moveTo(0,yy+.5);fx.lineTo(FW,yy+.5);fx.stroke();}
+  // datum axis
+  fx.strokeStyle=cssv('--axis');fx.lineWidth=1.5;fx.setLineDash([6,5]);fx.beginPath();fx.moveTo(CX,0);fx.lineTo(CX,FH);fx.stroke();fx.setLineDash([]);
+  fx.fillStyle=cssv('--axis');fx.font='600 10px "IBM Plex Mono"';fx.fillText('datum axis',CX+6,18);
+  // raw / profile
+  const drawStroke=(pts,col,w,a)=>{fx.strokeStyle=col;fx.lineWidth=w;fx.globalAlpha=a==null?1:a;fx.lineJoin='round';fx.lineCap='round';fx.beginPath();pts.forEach((p,i)=>i?fx.lineTo(p.x,p.y):fx.moveTo(p.x,p.y));fx.stroke();fx.globalAlpha=1;};
+  if(raw&&raw.length>1)drawStroke(raw,cssv('--ghost'),2);
+  if(profile){
+    const sp=profile.map(p=>({x:CX+p.r*SCALE,y:FH-p.y*SCALE}));
+    drawStroke(sp,cssv('--blue'),3);
+    if(mirror){const mp=profile.map(p=>({x:CX-p.r*SCALE,y:FH-p.y*SCALE}));drawStroke(mp,cssv('--snap'),3,0.85);
+      // close caps top/bottom across axis
+      fx.strokeStyle=cssv('--snap');fx.lineWidth=2;fx.globalAlpha=.6;
+      fx.beginPath();fx.moveTo(sp[0].x,sp[0].y);fx.lineTo(CX-profile[0].r*SCALE,FH-profile[0].y*SCALE);fx.stroke();
+      const n=sp.length-1;fx.beginPath();fx.moveTo(sp[n].x,sp[n].y);fx.lineTo(CX-profile[n].r*SCALE,FH-profile[n].y*SCALE);fx.stroke();fx.globalAlpha=1;}
+  }
+}
+function resample(p,n){if(p.length<2)return p.slice();let L=0;for(let i=1;i<p.length;i++)L+=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y);const st=L/(n-1);let o=[p[0]],d=0,i=1,pr=p[0];while(i<p.length){const s=Math.hypot(p[i].x-pr.x,p[i].y-pr.y);if(d+s>=st){const t=(st-d)/s,np={x:pr.x+(p[i].x-pr.x)*t,y:pr.y+(p[i].y-pr.y)*t};o.push(np);pr=np;d=0;}else{d+=s;pr=p[i];i++;}}while(o.length<n)o.push(p[p.length-1]);return o;}
+function strokeToProfile(s){const rs=resample(s,48);let prof=rs.map(p=>({r:Math.max(0.02,Math.abs(p.x-CX)/SCALE),y:(FH-p.y)/SCALE}));
+  // order bottom->top by y
+  prof.sort((a,b)=>a.y-b.y);return prof;}
+fc.addEventListener('pointerdown',e=>{if(view!=='flat')return;fc.setPointerCapture(e.pointerId);raw=[{x:e.offsetX,y:e.offsetY}];});
+fc.addEventListener('pointermove',e=>{if(raw){raw.push({x:e.offsetX,y:e.offsetY});drawFlat();}});
+fc.addEventListener('pointerup',()=>{if(raw&&raw.length>4){profile=strokeToProfile(raw);}raw=null;drawFlat();renderSide();});
+
+// ---------- 3D ----------
+let scene,cam,rndr,glEl,target,azim=-0.7,elev=0.3,rad=4,mesh;
+function init3D(){
+  glEl=document.getElementById('gl');
+  scene=new THREE.Scene();scene.background=new THREE.Color(0x0b1013);
+  cam=new THREE.PerspectiveCamera(45,1,0.1,100);target=new THREE.Vector3(0,1,0);
+  rndr=new THREE.WebGLRenderer({antialias:true});glEl.appendChild(rndr.domElement);
+  scene.add(new THREE.HemisphereLight(0xbcd2e0,0x101820,0.95));
+  const d=new THREE.DirectionalLight(0xffffff,0.9);d.position.set(4,8,5);scene.add(d);
+  const d2=new THREE.DirectionalLight(0x88aacc,0.4);d2.position.set(-5,-2,-4);scene.add(d2);
+  scene.add(new THREE.GridHelper(8,8,0x27343f,0x162029));
+  animate3D();
+  let dr=false,px,py;
+  glEl.addEventListener('pointerdown',e=>{dr=true;px=e.clientX;py=e.clientY;});
+  window.addEventListener('pointermove',e=>{if(!dr||view!=='3d')return;azim-=(e.clientX-px)*0.008;elev=Math.max(-1.3,Math.min(1.4,elev+(e.clientY-py)*0.008));px=e.clientX;py=e.clientY;});
+  window.addEventListener('pointerup',()=>dr=false);
+  glEl.addEventListener('wheel',e=>{if(view!=='3d')return;e.preventDefault();rad=Math.max(1.5,Math.min(20,rad*Math.exp(e.deltaY*0.0012)));},{passive:false});
+}
+function resize3D(){if(!rndr)return;const w=glEl.clientWidth,h=glEl.clientHeight;cam.aspect=w/h;cam.updateProjectionMatrix();rndr.setPixelRatio(Math.min(devicePixelRatio,2));rndr.setSize(w,h);}
+function animate3D(){requestAnimationFrame(animate3D);if(view!=='3d')return;cam.position.set(target.x+rad*Math.cos(elev)*Math.sin(azim),target.y+rad*Math.sin(elev),target.z+rad*Math.cos(elev)*Math.cos(azim));cam.lookAt(target);rndr.render(scene,cam);}
+function buildRevolve(){
+  if(mesh){mesh.geometry.dispose();scene.remove(mesh);mesh=null;}
+  if(!profile)return;
+  let pts=profile.map(p=>({r:p.r,y:p.y}));
+  if(!shell){pts=[{r:0.001,y:pts[0].y}].concat(pts).concat([{r:0.001,y:pts[pts.length-1].y}]);}
+  const N=segs,pos=[],idx=[],P=pts.length;
+  for(let j=0;j<P;j++)for(let s=0;s<=N;s++){const a=s/N*Math.PI*2;pos.push(pts[j].r*Math.cos(a),pts[j].y,pts[j].r*Math.sin(a));}
+  for(let j=0;j<P-1;j++)for(let s=0;s<N;s++){const a=j*(N+1)+s,b=j*(N+1)+s+1,c=(j+1)*(N+1)+s+1,d=(j+1)*(N+1)+s;idx.push(a,b,c,a,c,d);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();
+  const mat=new THREE.MeshStandardMaterial({color:0x7f9fb5,metalness:0.4,roughness:0.45,side:shell?THREE.DoubleSide:THREE.FrontSide});
+  mesh=new THREE.Mesh(g,mat);scene.add(mesh);
+  const ymax=Math.max(...pts.map(p=>p.y)),ymin=Math.min(...pts.map(p=>p.y));target.set(0,(ymax+ymin)/2,0);rad=Math.max(3,(ymax-ymin)*2.2+1);
+}
+
+// ---------- views ----------
+function setView(v){view=v;
+  document.getElementById('vFlat').classList.toggle('on',v==='flat');
+  document.getElementById('v3d').classList.toggle('on',v==='3d');
+  fc.style.display=v==='flat'?'block':'none';
+  glEl.style.display=v==='3d'?'block':'none';
+  document.getElementById('hint').style.display=v==='flat'?'block':'none';
+  if(v==='3d'){if(!rndr)init3D();resize3D();buildRevolve();}
+  if(v==='flat')drawFlat();
+  renderSide();
+}
+function renderSide(){
+  const s=document.getElementById('side');let h='';
+  if(view==='flat'){
+    h+=`<div class="grp"><h4>catalogued part</h4>`;
+    h+=`<select id="partSel" style="width:100%;background:var(--panel2);border:1px solid var(--hair2);color:var(--text);font:500 12px 'Space Grotesk';padding:8px;border-radius:6px;margin-bottom:7px">`;
+    h+=`<option value="">— load a real part —</option>`+Object.keys(PARTLIB).map(k=>`<option value="${k}"${k===loadedPart?' selected':''}>${k.replace(/_/g,' ')}</option>`).join('')+`</select>`;
+    if(loadedPart){const P=PARTLIB[loadedPart];h+=`<div class="note">${loadedPart.replace(/_/g,' ')} — ${P.function||''}${P.dims_mm?` · OD ${P.dims_mm.outer_mm} mm`:''}${P.shell?' · hollow (shell)':''}</div>`;}
+    else{h+=`<div class="note">pull a real catalogued part — its true dimensions become the half-profile; revolve it to build the part.</div>`;}
+    h+=`</div>`;
+    h+=`<div class="grp"><h4>draw half · close it</h4>`;
+    h+=`<div class="step">${profile?'Your half-profile is the blue curve. The teal is the mirror — that\'s the closure completing it.':'Draw half the silhouette on one side of the gold datum axis, bottom to top.'}</div>`;
+    h+=`<button class="btn ${mirror?'on':''}" id="aMirror">${mirror?'mirror: showing close':'mirror: off'}</button>`;
+    h+=`</div>`;
+    if(profile){h+=`<div class="grp"><h4>revolve</h4>
+      <div class="btnrow"><button class="btn ${shell?'on':''}" id="aShell">shell</button><button class="btn ${!shell?'on':''}" id="aSolid">solid</button></div>
+      <button class="btn go" id="aRev">revolve → 3D</button>
+      <div class="note">shell = a hollow wall you can work inside · solid = filled. revolving the half closes it around the datum.</div></div>`;}
+  } else {
+    h+=`<div class="grp"><h4>revolved ${shell?'shell':'solid'}</h4>
+      <div class="step">${shell?'A shell — orbit inside it to work in context.':'A filled solid of revolution.'}</div>
+      <div class="btnrow"><button class="btn ${shell?'on':''}" id="aShell">shell</button><button class="btn ${!shell?'on':''}" id="aSolid">solid</button></div>
+      <div class="row"><label>segments</label><input type="range" id="segR" min="6" max="64" value="${segs}"><span class="v" id="vseg">${segs}</span></div>
+      <button class="btn" id="aBack">← edit the profile</button></div>`;
+    h+=`<div class="note">drag to orbit (and dive inside a shell) · scroll to zoom. one half-sketch → a whole turned part.</div>`;
+  }
+  s.innerHTML=h;
+  const on=(id,fn)=>{const e=document.getElementById(id);if(e)e.onclick=fn;};
+  on('aMirror',()=>{mirror=!mirror;drawFlat();renderSide();});
+  on('aShell',()=>{shell=true;if(view==='3d')buildRevolve();drawFlat();renderSide();});
+  on('aSolid',()=>{shell=false;if(view==='3d')buildRevolve();drawFlat();renderSide();});
+  on('aRev',()=>setView('3d'));
+  on('aBack',()=>setView('flat'));
+  const psel=document.getElementById('partSel');
+  if(psel)psel.onchange=e=>{const k=e.target.value;if(!k)return;const P=PARTLIB[k];profile=P.profile.map(p=>({r:p.r,y:p.y}));shell=!!P.shell;mirror=true;loadedPart=k;raw=null;if(view==='3d')buildRevolve();drawFlat();renderSide();};
+  const seg=document.getElementById('segR');if(seg)seg.oninput=e=>{segs=+e.target.value;document.getElementById('vseg').textContent=segs;buildRevolve();};
+}
+document.getElementById('vFlat').onclick=()=>setView('flat');
+document.getElementById('v3d').onclick=()=>{if(profile)setView('3d');};
+document.getElementById('reset').onclick=()=>{raw=null;profile=null;if(mesh){mesh.geometry.dispose();scene&&scene.remove(mesh);mesh=null;}setView('flat');drawFlat();renderSide();};
+window.addEventListener('resize',()=>{fitFlat();resize3D();});
+fitFlat();renderSide();
+</script>
+</body>
+</html>
